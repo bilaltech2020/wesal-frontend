@@ -1,65 +1,318 @@
-import Image from "next/image";
+"use client";
+import { useState } from "react";
+
+const API_URL = "https://wesal-backend-production.up.railway.app";
 
 export default function Home() {
+  const [view, setView] = useState<"landing" | "login" | "register" | "dashboard">("landing");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<{ email: string; company: string } | null>(null);
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+if (!res.ok) throw new Error(Array.isArray(data.detail) ? data.detail[0]?.msg : data.detail || "خطأ في تسجيل الدخول");      setUser({ email, company: email.split("@")[0] });
+      setView("dashboard");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "حدث خطأ");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+body: JSON.stringify({ email, password, name: companyName }),     });
+      const data = await res.json();
+if (!res.ok) throw new Error(Array.isArray(data.detail) ? data.detail[0]?.msg : data.detail || "خطأ في التسجيل");      setUser({ email, company: companyName });
+      setView("dashboard");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "حدث خطأ");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (view === "dashboard") {
+    return (
+      <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+        {/* Sidebar */}
+        <div style={{ display: "flex", minHeight: "100vh" }}>
+          <div style={{ width: "240px", background: "#111118", borderLeft: "1px solid #1e1e2e", padding: "32px 20px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ fontSize: "22px", fontWeight: "900", color: "#c8b8ff", marginBottom: "32px", letterSpacing: "-0.5px" }}>وصال</div>
+            {[
+              { icon: "⬡", label: "لوحة التحكم", active: true },
+              { icon: "◈", label: "التكاملات" },
+              { icon: "◉", label: "العملاء" },
+              { icon: "◎", label: "الأتمتة" },
+              { icon: "◇", label: "التقارير" },
+              { icon: "○", label: "الإعدادات" },
+            ].map((item) => (
+              <div key={item.label} style={{
+                padding: "10px 14px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px",
+                background: item.active ? "#1a1a2e" : "transparent",
+                color: item.active ? "#c8b8ff" : "#666",
+                fontSize: "14px", fontWeight: item.active ? "600" : "400",
+                transition: "all 0.2s"
+              }}>
+                <span style={{ fontSize: "16px" }}>{item.icon}</span>
+                {item.label}
+              </div>
+            ))}
+            <div style={{ marginTop: "auto", padding: "10px 14px", borderRadius: "10px", background: "#1a1a2e", cursor: "pointer" }}
+              onClick={() => { setView("landing"); setUser(null); }}>
+              <span style={{ color: "#ff6b6b", fontSize: "14px" }}>⬡ تسجيل الخروج</span>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div style={{ flex: 1, padding: "40px" }}>
+            <div style={{ marginBottom: "40px" }}>
+              <h1 style={{ fontSize: "28px", fontWeight: "800", margin: 0, color: "#e8e8f0" }}>
+                أهلاً، {user?.company} 👋
+              </h1>
+              <p style={{ color: "#555", marginTop: "6px", fontSize: "14px" }}>هذه نظرة عامة على نشاطك</p>
+            </div>
+
+            {/* Stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "32px" }}>
+              {[
+                { label: "العمليات النشطة", value: "0", color: "#c8b8ff", icon: "◈" },
+                { label: "التكاملات", value: "0", color: "#80ffdb", icon: "◉" },
+                { label: "المهام المكتملة", value: "0", color: "#ffd166", icon: "◎" },
+                { label: "التوفير في الوقت", value: "0h", color: "#ff6b6b", icon: "◇" },
+              ].map((stat) => (
+                <div key={stat.label} style={{
+                  background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px",
+                  padding: "24px", position: "relative", overflow: "hidden"
+                }}>
+                  <div style={{ fontSize: "28px", fontWeight: "900", color: stat.color }}>{stat.value}</div>
+                  <div style={{ fontSize: "12px", color: "#555", marginTop: "6px" }}>{stat.label}</div>
+                  <div style={{ position: "absolute", top: "16px", left: "16px", fontSize: "24px", color: stat.color, opacity: 0.15 }}>{stat.icon}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Welcome card */}
+            <div style={{
+              background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
+              border: "1px solid #2a2a4e", borderRadius: "20px", padding: "40px",
+              textAlign: "center"
+            }}>
+              <div style={{ fontSize: "48px", marginBottom: "16px" }}>🚀</div>
+              <h2 style={{ fontSize: "22px", fontWeight: "700", color: "#c8b8ff", margin: "0 0 12px" }}>
+                مرحباً بك في وصال
+              </h2>
+              <p style={{ color: "#666", fontSize: "14px", lineHeight: "1.8", maxWidth: "400px", margin: "0 auto 24px" }}>
+                منصتك لأتمتة عمليات التجارة الإلكترونية. ابدأ بإضافة أول تكامل لك.
+              </p>
+              <button style={{
+                background: "#c8b8ff", color: "#0a0a0f", border: "none", borderRadius: "12px",
+                padding: "12px 28px", fontSize: "15px", fontWeight: "700", cursor: "pointer"
+              }}>
+                إضافة تكامل +
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === "login" || view === "register") {
+    return (
+      <div style={{
+        fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh",
+        background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center"
+      }}>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+        <div style={{ width: "400px" }}>
+          <div style={{ textAlign: "center", marginBottom: "40px" }}>
+            <div style={{ fontSize: "36px", fontWeight: "900", color: "#c8b8ff", letterSpacing: "-1px" }}>وصال</div>
+            <p style={{ color: "#555", marginTop: "8px", fontSize: "14px" }}>
+              {view === "login" ? "سجل دخولك للمتابعة" : "أنشئ حساباً جديداً"}
+            </p>
+          </div>
+
+          <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "20px", padding: "32px" }}>
+            {view === "register" && (
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ fontSize: "13px", color: "#888", display: "block", marginBottom: "8px" }}>اسم الشركة</label>
+                <input
+                  type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="شركتي"
+                  style={{
+                    width: "100%", padding: "12px 16px", background: "#0a0a0f", border: "1px solid #1e1e2e",
+                    borderRadius: "10px", color: "#e8e8f0", fontSize: "14px", outline: "none", boxSizing: "border-box"
+                  }}
+                />
+              </div>
+            )}
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "13px", color: "#888", display: "block", marginBottom: "8px" }}>البريد الإلكتروني</label>
+              <input
+                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="example@company.com"
+                style={{
+                  width: "100%", padding: "12px 16px", background: "#0a0a0f", border: "1px solid #1e1e2e",
+                  borderRadius: "10px", color: "#e8e8f0", fontSize: "14px", outline: "none", boxSizing: "border-box"
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: "24px" }}>
+              <label style={{ fontSize: "13px", color: "#888", display: "block", marginBottom: "8px" }}>كلمة المرور</label>
+              <input
+                type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                style={{
+                  width: "100%", padding: "12px 16px", background: "#0a0a0f", border: "1px solid #1e1e2e",
+                  borderRadius: "10px", color: "#e8e8f0", fontSize: "14px", outline: "none", boxSizing: "border-box"
+                }}
+              />
+            </div>
+
+            {error && <div style={{ color: "#ff6b6b", fontSize: "13px", marginBottom: "16px", textAlign: "center" }}>{error}</div>}
+
+            <button
+              onClick={view === "login" ? handleLogin : handleRegister}
+              disabled={loading}
+              style={{
+                width: "100%", padding: "14px", background: "#c8b8ff", color: "#0a0a0f",
+                border: "none", borderRadius: "12px", fontSize: "16px", fontWeight: "700",
+                cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1
+              }}
+            >
+              {loading ? "جاري التحميل..." : view === "login" ? "تسجيل الدخول" : "إنشاء حساب"}
+            </button>
+
+            <div style={{ textAlign: "center", marginTop: "20px", fontSize: "13px", color: "#555" }}>
+              {view === "login" ? (
+                <span>ليس لديك حساب؟ <span style={{ color: "#c8b8ff", cursor: "pointer" }} onClick={() => setView("register")}>سجل الآن</span></span>
+              ) : (
+                <span>لديك حساب؟ <span style={{ color: "#c8b8ff", cursor: "pointer" }} onClick={() => setView("login")}>سجل دخولك</span></span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ textAlign: "center", marginTop: "24px" }}>
+            <span style={{ color: "#555", fontSize: "13px", cursor: "pointer" }} onClick={() => setView("landing")}>← العودة للرئيسية</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Landing Page
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", background: "#0a0a0f", color: "#e8e8f0", minHeight: "100vh" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+
+      {/* Navbar */}
+      <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 60px", borderBottom: "1px solid #1e1e2e" }}>
+        <div style={{ fontSize: "26px", fontWeight: "900", color: "#c8b8ff", letterSpacing: "-0.5px" }}>وصال</div>
+        <div style={{ display: "flex", gap: "12px" }}>
+          <button onClick={() => setView("login")} style={{
+            padding: "10px 24px", background: "transparent", border: "1px solid #2a2a4e",
+            borderRadius: "10px", color: "#888", fontSize: "14px", cursor: "pointer"
+          }}>دخول</button>
+          <button onClick={() => setView("register")} style={{
+            padding: "10px 24px", background: "#c8b8ff", border: "none",
+            borderRadius: "10px", color: "#0a0a0f", fontSize: "14px", fontWeight: "700", cursor: "pointer"
+          }}>ابدأ مجاناً</button>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </nav>
+
+      {/* Hero */}
+      <div style={{ textAlign: "center", padding: "100px 60px 80px", position: "relative" }}>
+        <div style={{
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          width: "600px", height: "600px", background: "radial-gradient(circle, rgba(200,184,255,0.08) 0%, transparent 70%)",
+          borderRadius: "50%", pointerEvents: "none"
+        }} />
+        <div style={{
+          display: "inline-block", padding: "6px 16px", background: "#1a1a2e", border: "1px solid #2a2a4e",
+          borderRadius: "20px", fontSize: "12px", color: "#c8b8ff", marginBottom: "24px"
+        }}>
+          منصة SaaS للتجارة الإلكترونية 🚀
         </div>
-      </main>
+        <h1 style={{ fontSize: "64px", fontWeight: "900", lineHeight: "1.1", margin: "0 0 24px", letterSpacing: "-2px" }}>
+          أتمتة عمليات<br />
+          <span style={{ color: "#c8b8ff" }}>تجارتك الإلكترونية</span>
+        </h1>
+        <p style={{ fontSize: "18px", color: "#555", maxWidth: "500px", margin: "0 auto 40px", lineHeight: "1.8" }}>
+          وصال يربط متاجرك، يدير طلباتك، ويشغّل AI agent يتصفح ويشتري بشكل تلقائي
+        </p>
+        <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+          <button onClick={() => setView("register")} style={{
+            padding: "16px 36px", background: "#c8b8ff", border: "none", borderRadius: "14px",
+            color: "#0a0a0f", fontSize: "16px", fontWeight: "800", cursor: "pointer"
+          }}>ابدأ مجاناً</button>
+          <button onClick={() => setView("login")} style={{
+            padding: "16px 36px", background: "transparent", border: "1px solid #2a2a4e",
+            borderRadius: "14px", color: "#888", fontSize: "16px", cursor: "pointer"
+          }}>تسجيل الدخول</button>
+        </div>
+      </div>
+
+      {/* Features */}
+      <div style={{ padding: "60px", borderTop: "1px solid #1e1e2e" }}>
+        <h2 style={{ textAlign: "center", fontSize: "36px", fontWeight: "800", marginBottom: "48px", letterSpacing: "-1px" }}>
+          كل ما تحتاجه في مكان واحد
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "20px", maxWidth: "900px", margin: "0 auto" }}>
+          {[
+            { icon: "◈", title: "AI Shopping Agent", desc: "يتصفح المواقع ويشتري المنتجات تلقائياً بدون تدخل" },
+            { icon: "◉", title: "ربط المتاجر", desc: "يتكامل مع Shopify وInstagram وأي منصة تجارية" },
+            { icon: "◎", title: "إدارة الطلبات", desc: "تتبع كل طلب من اللحظة الأولى حتى التسليم" },
+            { icon: "◇", title: "لوحة تحكم ذكية", desc: "إحصائيات وتقارير لحظية لمتجرك" },
+            { icon: "○", title: "Multi-tenant", desc: "خدم عدة متاجر وعملاء من نفس المنصة" },
+            { icon: "⬡", title: "API مفتوح", desc: "اربط أي نظام خارجي بكل سهولة" },
+          ].map((f) => (
+            <div key={f.title} style={{
+              background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", padding: "28px",
+              transition: "border-color 0.2s"
+            }}>
+              <div style={{ fontSize: "28px", color: "#c8b8ff", marginBottom: "12px" }}>{f.icon}</div>
+              <div style={{ fontSize: "16px", fontWeight: "700", marginBottom: "8px" }}>{f.title}</div>
+              <div style={{ fontSize: "13px", color: "#555", lineHeight: "1.7" }}>{f.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* CTA */}
+      <div style={{ textAlign: "center", padding: "80px 60px", borderTop: "1px solid #1e1e2e" }}>
+        <h2 style={{ fontSize: "40px", fontWeight: "900", marginBottom: "16px", letterSpacing: "-1px" }}>
+          جاهز تبدأ؟
+        </h2>
+        <p style={{ color: "#555", fontSize: "16px", marginBottom: "32px" }}>انضم الآن وأتمت عمليات متجرك</p>
+        <button onClick={() => setView("register")} style={{
+          padding: "16px 48px", background: "#c8b8ff", border: "none", borderRadius: "14px",
+          color: "#0a0a0f", fontSize: "18px", fontWeight: "800", cursor: "pointer"
+        }}>ابدأ مجاناً ←</button>
+      </div>
+
+      {/* Footer */}
+      <div style={{ textAlign: "center", padding: "24px", borderTop: "1px solid #1e1e2e", color: "#333", fontSize: "12px" }}>
+        © 2025 وصال — جميع الحقوق محفوظة
+      </div>
     </div>
   );
 }

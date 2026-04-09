@@ -207,7 +207,7 @@ export default function Home() {
     { icon: "○", label: "الإعدادات", viewKey: "dashboard" },
   ];
 
-  const Sidebar = () => (
+  const renderSidebar = () => (
     <div style={{ width: "240px", background: "#111118", borderLeft: "1px solid #1e1e2e", padding: "32px 20px", display: "flex", flexDirection: "column", gap: "8px", minHeight: "100vh" }}>
       <div style={{ fontSize: "22px", fontWeight: "900", color: "#c8b8ff", marginBottom: "32px", letterSpacing: "-0.5px" }}>وصال</div>
       {sidebarItems.map((item) => (
@@ -240,7 +240,7 @@ export default function Home() {
       <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
         <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
         <div style={{ display: "flex", minHeight: "100vh" }}>
-          <Sidebar />
+          {renderSidebar()}
           <div style={{ flex: 1, padding: "40px", overflowY: "auto" }}>
             <div style={{ marginBottom: "32px" }}>
               <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 6px", color: "#e8e8f0" }}>مراقبة المخزون 📦</h1>
@@ -343,7 +343,7 @@ export default function Home() {
       <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
         <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
         <div style={{ display: "flex", minHeight: "100vh" }}>
-          <Sidebar />
+          {renderSidebar()}
           <div style={{ flex: 1, padding: "40px" }}>
             <div style={{ marginBottom: "32px" }}>
               <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 6px", color: "#e8e8f0" }}>مراقبة المنافسين</h1>
@@ -456,7 +456,7 @@ export default function Home() {
       <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
         <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
         <div style={{ display: "flex", minHeight: "100vh" }}>
-          <Sidebar />
+          {renderSidebar()}
           <div style={{ flex: 1, padding: "40px" }}>
             <div style={{ marginBottom: "40px" }}>
               <h1 style={{ fontSize: "28px", fontWeight: "800", margin: 0, color: "#e8e8f0" }}>أهلاً، {user?.company} 👋</h1>

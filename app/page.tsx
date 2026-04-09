@@ -13,8 +13,33 @@ interface ScrapedProduct {
   scrapedAt: string;
 }
 
+interface Store {
+  id: string;
+  name: string;
+  url: string;
+}
+
+interface InventoryResult {
+  storeId: string;
+  storeName: string;
+  storeUrl: string;
+  name: string;
+  price: string;
+  available: boolean;
+  image: string;
+  status: "loading" | "done" | "error";
+  error?: string;
+}
+
+interface InventorySearch {
+  id: string;
+  sku: string;
+  results: InventoryResult[];
+  searchedAt: string;
+}
+
 export default function Home() {
-  const [view, setView] = useState<"landing" | "login" | "register" | "dashboard" | "competitors">("landing");
+  const [view, setView] = useState<"landing" | "login" | "register" | "dashboard" | "competitors" | "inventory">("landing");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -28,6 +53,71 @@ export default function Home() {
   const [scrapeError, setScrapeError] = useState("");
   const [products, setProducts] = useState<ScrapedProduct[]>([]);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+
+  // Inventory state
+  const [stores, setStores] = useState<Store[]>([]);
+  const [newStoreName, setNewStoreName] = useState("");
+  const [newStoreUrl, setNewStoreUrl] = useState("");
+  const [skuInput, setSkuInput] = useState("");
+  const [inventorySearches, setInventorySearches] = useState<InventorySearch[]>([]);
+  const [invSearching, setInvSearching] = useState(false);
+
+  const handleAddStore = () => {
+    if (!newStoreName.trim() || !newStoreUrl.trim()) return;
+    const url = newStoreUrl.startsWith("http") ? newStoreUrl : "https://" + newStoreUrl;
+    setStores((prev) => [...prev, { id: Math.random().toString(36).slice(2), name: newStoreName.trim(), url }]);
+    setNewStoreName("");
+    setNewStoreUrl("");
+  };
+
+  const handleInventorySearch = async () => {
+    if (!skuInput.trim() || stores.length === 0) return;
+    setInvSearching(true);
+    const searchId = Math.random().toString(36).slice(2);
+    const initialResults: InventoryResult[] = stores.map((s) => ({
+      storeId: s.id, storeName: s.name, storeUrl: s.url,
+      name: "", price: "", available: false, image: "", status: "loading",
+    }));
+    const newSearch: InventorySearch = {
+      id: searchId, sku: skuInput.trim(), results: initialResults,
+      searchedAt: new Date().toLocaleTimeString("ar-SA"),
+    };
+    setInventorySearches((prev) => [newSearch, ...prev]);
+    setSkuInput("");
+
+    await Promise.all(stores.map(async (store) => {
+      try {
+        // Build search URL: append SKU as search query
+        const searchUrl = `${store.url}/search?q=${encodeURIComponent(skuInput.trim())}`;
+        const res = await fetch(`${API_URL}/scrape`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: searchUrl }),
+        });
+        const data = await res.json();
+        setInventorySearches((prev) => prev.map((s) =>
+          s.id !== searchId ? s : {
+            ...s, results: s.results.map((r) =>
+              r.storeId !== store.id ? r : {
+                ...r, name: data.name || "0", price: data.price || "0",
+                available: !!(data.name && data.name !== "0"), image: data.image || "",
+                status: "done" as const,
+              }
+            ),
+          }
+        ));
+      } catch {
+        setInventorySearches((prev) => prev.map((s) =>
+          s.id !== searchId ? s : {
+            ...s, results: s.results.map((r) =>
+              r.storeId !== store.id ? r : { ...r, status: "error" as const, error: "فشل الاتصال" }
+            ),
+          }
+        ));
+      }
+    }));
+    setInvSearching(false);
+  };
 
   const handleLogin = async () => {
     setLoading(true);
@@ -88,7 +178,7 @@ export default function Home() {
         name: data.name || "اسم غير متوفر",
         price: data.price || "—",
         image: data.image || "",
-        available: !!data.name,
+        available: !!(data.name && data.name !== "0"),
         scrapedAt: new Date().toLocaleTimeString("ar-SA"),
       };
       if (existingId) {
@@ -112,6 +202,7 @@ export default function Home() {
     { icon: "◉", label: "العملاء", viewKey: "dashboard" },
     { icon: "◎", label: "الأتمتة", viewKey: "dashboard" },
     { icon: "🔍", label: "مراقبة المنافسين", viewKey: "competitors" },
+    { icon: "📦", label: "مراقبة المخزون", viewKey: "inventory" },
     { icon: "◇", label: "التقارير", viewKey: "dashboard" },
     { icon: "○", label: "الإعدادات", viewKey: "dashboard" },
   ];
@@ -122,16 +213,11 @@ export default function Home() {
       {sidebarItems.map((item) => (
         <div
           key={item.label}
-          onClick={() => setView(item.viewKey as "dashboard" | "competitors")}
+          onClick={() => setView(item.viewKey as "dashboard" | "competitors" | "inventory")}
           style={{
             padding: "10px 14px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px",
-            background: view === item.viewKey && item.viewKey === "competitors" && view === "competitors"
-              ? "#1a1a2e"
-              : view === "dashboard" && item.viewKey === "dashboard" && item.label === "لوحة التحكم"
-              ? "#1a1a2e"
-              : "transparent",
-            color: (view === "competitors" && item.viewKey === "competitors") || (view === "dashboard" && item.label === "لوحة التحكم")
-              ? "#c8b8ff" : "#666",
+            background: view === item.viewKey ? "#1a1a2e" : "transparent",
+            color: view === item.viewKey ? "#c8b8ff" : "#666",
             fontSize: "14px", fontWeight: "500", transition: "all 0.2s",
           }}
         >
@@ -147,6 +233,109 @@ export default function Home() {
       </div>
     </div>
   );
+
+  // ─── Inventory View ───
+  if (view === "inventory") {
+    return (
+      <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+        <div style={{ display: "flex", minHeight: "100vh" }}>
+          <Sidebar />
+          <div style={{ flex: 1, padding: "40px", overflowY: "auto" }}>
+            <div style={{ marginBottom: "32px" }}>
+              <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 6px", color: "#e8e8f0" }}>مراقبة المخزون 📦</h1>
+              <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>أضف المتاجر واكتب SKU للبحث في عدة متاجر بنفس الوقت</p>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "24px", alignItems: "start" }}>
+              {/* Left: Stores */}
+              <div>
+                <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", padding: "20px", marginBottom: "16px" }}>
+                  <p style={{ margin: "0 0 14px", fontSize: "13px", color: "#888", fontWeight: "600" }}>إضافة متجر</p>
+                  <input value={newStoreName} onChange={(e) => setNewStoreName(e.target.value)} placeholder="اسم المتجر"
+                    style={{ width: "100%", marginBottom: "8px", padding: "10px 14px", background: "#0a0a0f", border: "1px solid #2a2a3e", borderRadius: "8px", color: "#e8e8f0", fontSize: "13px", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+                  <input value={newStoreUrl} onChange={(e) => setNewStoreUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddStore()} placeholder="https://store.com"
+                    style={{ width: "100%", marginBottom: "10px", padding: "10px 14px", background: "#0a0a0f", border: "1px solid #2a2a3e", borderRadius: "8px", color: "#e8e8f0", fontSize: "13px", outline: "none", fontFamily: "inherit", boxSizing: "border-box", direction: "ltr", textAlign: "left" }} />
+                  <button onClick={handleAddStore} disabled={!newStoreName.trim() || !newStoreUrl.trim()}
+                    style={{ width: "100%", padding: "10px", background: "#c8b8ff", color: "#0a0a0f", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", fontFamily: "inherit" }}>
+                    + إضافة
+                  </button>
+                </div>
+                {stores.length > 0 && (
+                  <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", overflow: "hidden" }}>
+                    <div style={{ padding: "14px 16px", borderBottom: "1px solid #1e1e2e", fontSize: "11px", color: "#555", fontWeight: "600" }}>المتاجر ({stores.length})</div>
+                    {stores.map((s) => (
+                      <div key={s.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #141420", gap: "10px" }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
+                        <div style={{ flex: 1, overflow: "hidden" }}>
+                          <div style={{ fontSize: "13px", fontWeight: "500" }}>{s.name}</div>
+                          <div style={{ fontSize: "11px", color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", direction: "ltr", textAlign: "left" }}>{s.url}</div>
+                        </div>
+                        <button onClick={() => setStores((p) => p.filter((x) => x.id !== s.id))} style={{ background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: "12px" }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Right: Search */}
+              <div>
+                <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", padding: "20px", marginBottom: "24px" }}>
+                  <p style={{ margin: "0 0 14px", fontSize: "13px", color: "#888", fontWeight: "600" }}>بحث بـ SKU أو اسم المنتج</p>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <input value={skuInput} onChange={(e) => setSkuInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleInventorySearch()} placeholder="مثال: كنبة L-shape أو SKU-1234"
+                      style={{ flex: 1, padding: "12px 16px", background: "#0a0a0f", border: "1px solid #2a2a3e", borderRadius: "10px", color: "#e8e8f0", fontSize: "14px", outline: "none", fontFamily: "inherit" }} />
+                    <button onClick={handleInventorySearch} disabled={invSearching || !skuInput.trim() || stores.length === 0}
+                      style={{ padding: "12px 22px", background: invSearching ? "#2a2a3e" : "#c8b8ff", color: invSearching ? "#888" : "#0a0a0f", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: "700", cursor: invSearching ? "not-allowed" : "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                      {invSearching ? "جاري البحث..." : "بحث في الكل ←"}
+                    </button>
+                  </div>
+                  {stores.length === 0 && <p style={{ margin: "10px 0 0", fontSize: "12px", color: "#ff6b6b" }}>⚠️ أضف متجراً واحداً على الأقل</p>}
+                </div>
+                {inventorySearches.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "60px 0", color: "#333" }}>
+                    <div style={{ fontSize: "40px", marginBottom: "12px" }}>📦</div>
+                    <p style={{ fontSize: "14px", margin: 0 }}>ابحث عن منتج لترى النتائج هنا</p>
+                  </div>
+                ) : inventorySearches.map((search) => (
+                  <div key={search.id} style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", overflow: "hidden", marginBottom: "20px" }}>
+                    <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e1e2e", display: "flex", alignItems: "center", gap: "12px" }}>
+                      <span style={{ fontSize: "14px", fontWeight: "700", color: "#c8b8ff" }}>{search.sku}</span>
+                      <span style={{ fontSize: "11px", color: "#555" }}>{search.searchedAt}</span>
+                      <span style={{ marginRight: "auto", fontSize: "11px", color: "#555" }}>{search.results.filter((r) => r.status === "done" && r.available).length} متوفر من {search.results.length}</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "1px", background: "#141420" }}>
+                      {search.results.map((r) => (
+                        <div key={r.storeId} style={{ background: "#111118", padding: "16px" }}>
+                          <div style={{ fontSize: "12px", fontWeight: "600", color: "#888", marginBottom: "10px" }}>{r.storeName}</div>
+                          {r.status === "loading" ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#555", fontSize: "13px" }}>
+                              <span style={{ width: 12, height: 12, border: "2px solid #333", borderTopColor: "#c8b8ff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+                              جاري البحث...
+                            </div>
+                          ) : r.status === "error" ? (
+                            <div style={{ fontSize: "12px", color: "#ff6b6b" }}>⚠️ {r.error}</div>
+                          ) : (
+                            <>
+                              <div style={{ fontSize: "13px", fontWeight: "500", marginBottom: "6px", color: "#e8e8f0" }}>{r.name}</div>
+                              <div style={{ fontSize: "15px", fontWeight: "700", color: "#c8b8ff", marginBottom: "8px" }}>{r.price}</div>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "20px", fontSize: "11px", background: r.available ? "#0d1f0d" : "#1f0d0d", color: r.available ? "#4ade80" : "#f87171", border: "1px solid " + (r.available ? "#1a3a1a" : "#3a1a1a") }}>
+                                <span style={{ width: 5, height: 5, borderRadius: "50%", background: r.available ? "#4ade80" : "#f87171" }} />
+                                {r.available ? "متوفر" : "غير متوفر"}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <style>{"@keyframes spin { to { transform: rotate(360deg); } }"}</style>
+      </div>
+    );
+  }
 
   // ─── Competitors View ───
   if (view === "competitors") {

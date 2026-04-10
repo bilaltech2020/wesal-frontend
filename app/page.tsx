@@ -1,5 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+function loadXLSX(): Promise<void> {
+  return new Promise((resolve) => {
+    if ((window as any).XLSX) { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = () => resolve();
+    document.head.appendChild(s);
+  });
+}
 
 const API_URL = "https://wesal-backend-production.up.railway.app";
 
@@ -41,6 +51,8 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(false);
   const [user, setUser] = useState<{ email: string; company: string } | null>(null);
 
+  useEffect(() => { loadXLSX(); }, []);
+
   // Competitors
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [scrapeLoading, setScrapeLoading] = useState(false);
@@ -69,6 +81,7 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (!file) return;
     setExcelFileName(file.name);
+    await loadXLSX();
     const XLSX = (window as any).XLSX;
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array" });
@@ -96,7 +109,7 @@ export default function Home() {
       for (const store of stores) {
         try {
           const site = store.url.replace("https://", "").replace("http://", "").replace(/\/+$/, "");
-          const res = await fetch(\`\${API_URL}/search-product\`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sku, site }) });
+          const res = await fetch(`\${API_URL}/search-product`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sku, site }) });
           const data = await res.json();
           if (data.results && data.results.length > 0) {
             data.results.slice(0, 2).forEach((p: any) => {
@@ -202,7 +215,7 @@ export default function Home() {
   if (view === "inventory") return (
     <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" />
+
       <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
       <div style={{ display: "flex", minHeight: "100vh" }}>
         {sidebarJSX}

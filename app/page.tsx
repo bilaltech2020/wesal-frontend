@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 function loadXLSX(): Promise<void> {
   return new Promise((resolve) => {
@@ -76,6 +76,7 @@ export default function Home() {
   const [excelSearching, setExcelSearching] = useState(false);
   const [excelResults, setExcelResults] = useState<{sku:string; productName:string; storeName:string; price:string; url:string; found:boolean}[]>([]);
   const [excelFileName, setExcelFileName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -258,12 +259,17 @@ export default function Home() {
                 <p style={{ margin: "0 0 14px", fontSize: "13px", color: "#888", fontWeight: "600" }}>رفع ملف Excel 📊</p>
 
                 {!excelRows.length ? (
-                  <label style={{ display: "block", border: "2px dashed #2a2a3e", borderRadius: "10px", padding: "28px", textAlign: "center", cursor: "pointer" }}>
-                    <div style={{ fontSize: "28px", marginBottom: "8px" }}>📊</div>
-                    <div style={{ fontSize: "14px", color: "#c8b8ff", marginBottom: "4px" }}>اسحب ملف Excel هنا أو اضغط للرفع</div>
-                    <div style={{ fontSize: "12px", color: "#555" }}>.xlsx أو .xls</div>
-                    <input type="file" accept=".xlsx,.xls" onChange={handleExcelUpload} style={{ display: "none" }} />
-                  </label>
+                  <div>
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{ border: "2px dashed #2a2a3e", borderRadius: "10px", padding: "28px", textAlign: "center", cursor: "pointer" }}
+                    >
+                      <div style={{ fontSize: "28px", marginBottom: "8px" }}>📊</div>
+                      <div style={{ fontSize: "14px", color: "#c8b8ff", marginBottom: "4px" }}>اضغط لرفع ملف Excel</div>
+                      <div style={{ fontSize: "12px", color: "#555" }}>.xlsx أو .xls</div>
+                    </div>
+                    <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleExcelUpload} style={{ display: "none" }} />
+                  </div>
                 ) : (
                   <div>
                     <div style={{ background: "#0d0d14", border: "1px solid #1e1e2e", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>

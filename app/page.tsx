@@ -7,8 +7,11 @@ interface ScrapedProduct {
   id: string; url: string; name: string; price: string; image: string; available: boolean; scrapedAt: string;
 }
 interface Store { id: string; name: string; url: string; }
+interface ProductResult {
+  name: string; url: string; price: string; available: boolean; snippet: string;
+}
 interface InventoryResult {
-  storeId: string; storeName: string; name: string; price: string; available: boolean; status: "loading" | "done" | "error"; error?: string;
+  storeId: string; storeName: string; count: number; products: ProductResult[]; status: "loading" | "done" | "error"; error?: string;
 }
 interface InventorySearch { id: string; sku: string; results: InventoryResult[]; searchedAt: string; }
 
@@ -105,15 +108,15 @@ export default function Home() {
     setSearching(true);
     const sid = Math.random().toString(36).slice(2);
     const sku = skuInput.trim();
-    const init: InventoryResult[] = stores.map(s => ({ storeId: s.id, storeName: s.name, name: "", price: "", available: false, status: "loading" }));
+    const init: InventoryResult[] = stores.map(s => ({ storeId: s.id, storeName: s.name, count: 0, products: [], status: "loading" }));
     setSearches(p => [{ id: sid, sku, results: init, searchedAt: new Date().toLocaleTimeString("ar-SA") }, ...p]);
     setSkuInput("");
     await Promise.all(stores.map(async (store) => {
       try {
-        const searchUrl = `${store.url}/search?q=${encodeURIComponent(sku)}`;
-        const res = await fetch(`${API_URL}/scrape`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: searchUrl }) });
+        const site = store.url.replace("https://", "").replace("http://", "").replace(/\/+$/, "");
+        const res = await fetch(`${API_URL}/search-product`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sku, site }) });
         const data = await res.json();
-        setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r => r.storeId !== store.id ? r : { ...r, name: data.name || "0", price: data.price || "0", available: !!(data.name && data.name !== "0"), status: "done" as const }) }));
+        setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r => r.storeId !== store.id ? r : { ...r, count: data.count || 0, products: data.results || [], status: "done" as const }) }));
       } catch {
         setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r => r.storeId !== store.id ? r : { ...r, status: "error" as const, error: "فشل الاتصال" }) }));
       }
@@ -224,35 +227,65 @@ export default function Home() {
                 </div>
               ) : searches.map(search => (
                 <div key={search.id} style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", overflow: "hidden", marginBottom: "20px" }}>
+                  {/* Search header */}
                   <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e1e2e", display: "flex", alignItems: "center", gap: "12px" }}>
                     <span style={{ fontSize: "14px", fontWeight: "700", color: "#c8b8ff" }}>{search.sku}</span>
                     <span style={{ fontSize: "11px", color: "#555" }}>{search.searchedAt}</span>
-                    <span style={{ marginRight: "auto", fontSize: "11px", color: "#555" }}>{search.results.filter(r => r.status === "done" && r.available).length} متوفر من {search.results.length}</span>
+                    <span style={{ marginRight: "auto", fontSize: "11px", color: "#888" }}>
+                      {search.results.reduce((acc, r) => acc + (r.status === "done" ? r.count : 0), 0)} نتيجة
+                    </span>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "1px", background: "#141420" }}>
-                    {search.results.map(r => (
-                      <div key={r.storeId} style={{ background: "#111118", padding: "16px" }}>
-                        <div style={{ fontSize: "11px", fontWeight: "600", color: "#666", marginBottom: "8px" }}>{r.storeName}</div>
-                        {r.status === "loading" ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#555", fontSize: "12px" }}>
-                            <span style={{ width: 12, height: 12, border: "2px solid #333", borderTopColor: "#c8b8ff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
-                            جاري...
-                          </div>
-                        ) : r.status === "error" ? (
-                          <div style={{ fontSize: "12px", color: "#ff6b6b" }}>⚠️ {r.error}</div>
-                        ) : (
-                          <>
-                            <div style={{ fontSize: "13px", marginBottom: "4px", color: "#e8e8f0" }}>{r.name}</div>
-                            <div style={{ fontSize: "15px", fontWeight: "700", color: "#c8b8ff", marginBottom: "8px" }}>{r.price}</div>
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "20px", fontSize: "11px", background: r.available ? "#0d1f0d" : "#1f0d0d", color: r.available ? "#4ade80" : "#f87171", border: "1px solid " + (r.available ? "#1a3a1a" : "#3a1a1a") }}>
-                              <span style={{ width: 5, height: 5, borderRadius: "50%", background: r.available ? "#4ade80" : "#f87171" }} />
-                              {r.available ? "متوفر" : "غير متوفر"}
-                            </span>
-                          </>
+                  {/* Per-store results as table */}
+                  {search.results.map(r => (
+                    <div key={r.storeId}>
+                      {/* Store header */}
+                      <div style={{ padding: "10px 20px", background: "#0f0f1a", display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #1e1e2e" }}>
+                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: r.status === "loading" ? "#ffd166" : r.status === "error" ? "#ff6b6b" : "#4ade80" }} />
+                        <span style={{ fontSize: "13px", fontWeight: "600", color: "#c8b8ff" }}>{r.storeName}</span>
+                        {r.status === "loading" && (
+                          <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#555" }}>
+                            <span style={{ width: 10, height: 10, border: "2px solid #333", borderTopColor: "#c8b8ff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+                            جاري البحث...
+                          </span>
                         )}
+                        {r.status === "done" && <span style={{ fontSize: "12px", color: "#555" }}>{r.count} منتج</span>}
+                        {r.status === "error" && <span style={{ fontSize: "12px", color: "#ff6b6b" }}>⚠️ {r.error}</span>}
                       </div>
-                    ))}
-                  </div>
+                      {/* Products table */}
+                      {r.status === "done" && r.products.length > 0 && (
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                          <thead>
+                            <tr style={{ background: "#0a0a0f" }}>
+                              <th style={{ padding: "8px 16px", textAlign: "right", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e" }}>اسم المنتج</th>
+                              <th style={{ padding: "8px 16px", textAlign: "center", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "110px" }}>السعر</th>
+                              <th style={{ padding: "8px 16px", textAlign: "center", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "90px" }}>الحالة</th>
+                              <th style={{ padding: "8px 16px", textAlign: "center", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "70px" }}>رابط</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {r.products.map((p, idx) => (
+                              <tr key={idx} style={{ borderBottom: "1px solid #141420", background: idx % 2 === 0 ? "transparent" : "#0d0d14" }}>
+                                <td style={{ padding: "10px 16px", color: "#e8e8f0", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</td>
+                                <td style={{ padding: "10px 16px", textAlign: "center", color: "#c8b8ff", fontWeight: "600" }}>{p.price || "—"}</td>
+                                <td style={{ padding: "10px 16px", textAlign: "center" }}>
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 10px", borderRadius: "20px", fontSize: "11px", background: "#0d1f0d", color: "#4ade80", border: "1px solid #1a3a1a" }}>
+                                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#4ade80" }} />
+                                    متوفر
+                                  </span>
+                                </td>
+                                <td style={{ padding: "10px 16px", textAlign: "center" }}>
+                                  <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: "#7c6af7", fontSize: "12px", textDecoration: "none" }}>فتح ↗</a>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                      {r.status === "done" && r.products.length === 0 && (
+                        <div style={{ padding: "16px 20px", fontSize: "13px", color: "#555" }}>لا توجد نتائج</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>

@@ -16,7 +16,7 @@ const API_URL = "https://wesal-backend-production.up.railway.app";
 interface ScrapedProduct {
   id: string; url: string; name: string; price: string; image: string; available: boolean; scrapedAt: string;
 }
-interface Store { id: string; name: string; url: string; }
+interface Store { id: string; name: string; url: string; urlTemplate: string; }
 interface ProductResult {
   name: string; url: string; price: string; available: boolean; snippet: string;
 }
@@ -71,6 +71,7 @@ export default function Home() {
   // Inventory
   const [storeName, setStoreName] = useState("");
   const [storeUrl, setStoreUrl] = useState("");
+  const [storeTemplate, setStoreTemplate] = useState("");
   const [stores, setStores] = useState<Store[]>([]);
   const [skuInput, setSkuInput] = useState("");
   const [searches, setSearches] = useState<InventorySearch[]>([]);
@@ -117,6 +118,22 @@ export default function Home() {
       let found = false;
       for (const store of stores) {
         try {
+          let fetchUrl: string;
+          if (store.urlTemplate && store.urlTemplate.includes("{SKU}")) {
+            fetchUrl = store.urlTemplate.replace("{SKU}", encodeURIComponent(sku));
+            const res2 = await fetch(`${API_URL}/scrape-dynamic`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: fetchUrl }) });
+            const data2 = await res2.json();
+            if (data2.name && data2.name !== "0") {
+              allResults.push({ sku, productName, storeName: store.name, price: data2.price || "—", url: fetchUrl, found: true });
+              found = true;
+            } else if (data2.results && data2.results.length > 0) {
+              data2.results.slice(0, 2).forEach((p: any) => {
+                allResults.push({ sku, productName, storeName: store.name, price: p.price || "—", url: p.url || fetchUrl, found: true });
+              });
+              found = true;
+            }
+            continue;
+          }
           const site = store.url.replace("https://", "").replace("http://", "").replace(/\/+$/, "");
           const res = await fetch(`${API_URL}/search-product`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sku, site }) });
           const data = await res.json();
@@ -183,8 +200,8 @@ export default function Home() {
   const addStore = () => {
     if (!storeName.trim() || !storeUrl.trim()) return;
     const url = storeUrl.startsWith("http") ? storeUrl.trim() : "https://" + storeUrl.trim();
-    setStores(p => [...p, { id: Math.random().toString(36).slice(2), name: storeName.trim(), url }]);
-    setStoreName(""); setStoreUrl("");
+    setStores(p => [...p, { id: Math.random().toString(36).slice(2), name: storeName.trim(), url, urlTemplate: storeTemplate.trim() }]);
+    setStoreName(""); setStoreUrl(""); setStoreTemplate("");
   };
 
   const doSearch = async () => {
@@ -197,6 +214,18 @@ export default function Home() {
     setSkuInput("");
     await Promise.all(stores.map(async (store) => {
       try {
+        if (store.urlTemplate && store.urlTemplate.includes("{SKU}")) {
+          const directUrl = store.urlTemplate.replace("{SKU}", encodeURIComponent(sku));
+          const r = await fetch(`${API_URL}/scrape-dynamic`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: directUrl }) });
+          const d = await r.json();
+          const prod2 = d.name && d.name !== "0"
+            ? [{ name: d.name, url: directUrl, price: d.price || "—", available: true, snippet: "" }]
+            : d.results && d.results.length > 0
+            ? d.results.slice(0,3).map((p: any) => ({ name: p.name, url: p.url || directUrl, price: p.price || "—", available: true, snippet: "" }))
+            : [];
+          setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r2 => r2.storeId !== store.id ? r2 : { ...r2, count: prod2.length, products: prod2, status: "done" as const }) }));
+          return;
+        }
         const site = store.url.replace("https://", "").replace("http://", "").replace(/\/+$/, "");
         const res = await fetch(`${API_URL}/search-product`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sku, site }) });
         const data = await res.json();
@@ -257,7 +286,8 @@ export default function Home() {
                       <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
                       <div style={{ flex: 1, overflow: "hidden" }}>
                         <div style={{ fontSize: "13px", fontWeight: "500" }}>{s.name}</div>
-                        <div style={{ fontSize: "11px", color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", direction: "ltr", textAlign: "left" }}>{s.url}</div>
+                        <div style={{ fontSize: "11px", color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", direction: "ltr", textAlign: "left" }}>{s.urlTemplate || s.url}</div>
+                        {s.urlTemplate && <div style={{ fontSize: "10px", color: "#4ade80", marginTop: "2px" }}>✓ template رابط</div>}
                       </div>
                       <button onClick={() => setStores(p => p.filter(x => x.id !== s.id))} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "13px" }}>✕</button>
                     </div>

@@ -51,7 +51,15 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(false);
   const [user, setUser] = useState<{ email: string; company: string } | null>(null);
 
-  useEffect(() => { loadXLSX(); }, []);
+  useEffect(() => {
+    loadXLSX();
+    const token = localStorage.getItem("wesal_token");
+    const savedUser = localStorage.getItem("wesal_user");
+    if (token && savedUser) {
+      setUser(JSON.parse(savedUser));
+      setView("dashboard");
+    }
+  }, []);
 
   // Competitors
   const [scrapeUrl, setScrapeUrl] = useState("");
@@ -133,7 +141,10 @@ export default function Home() {
       const res = await fetch(`${API_URL}/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const data = await res.json();
       if (!res.ok) throw new Error(Array.isArray(data.detail) ? data.detail[0]?.msg : data.detail || "خطأ");
-      setUser({ email, company: email.split("@")[0] }); setView("dashboard");
+      const u = { email, company: email.split("@")[0] };
+      localStorage.setItem("wesal_token", data.token);
+      localStorage.setItem("wesal_user", JSON.stringify(u));
+      setUser(u); setView("dashboard");
     } catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "حدث خطأ"); }
     finally { setAuthLoading(false); }
   };
@@ -144,7 +155,10 @@ export default function Home() {
       const res = await fetch(`${API_URL}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, name: companyName }) });
       const data = await res.json();
       if (!res.ok) throw new Error(Array.isArray(data.detail) ? data.detail[0]?.msg : data.detail || "خطأ");
-      setUser({ email, company: companyName }); setView("dashboard");
+      const u = { email, company: companyName };
+      localStorage.setItem("wesal_token", data.token);
+      localStorage.setItem("wesal_user", JSON.stringify(u));
+      setUser(u); setView("dashboard");
     } catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "حدث خطأ"); }
     finally { setAuthLoading(false); }
   };
@@ -204,7 +218,7 @@ export default function Home() {
           <span>{item.icon}</span>{item.label}
         </div>
       ))}
-      <div style={{ marginTop: "auto", padding: "10px 14px", borderRadius: "10px", background: "#1a1a2e", cursor: "pointer" }} onClick={() => { setView("landing"); setUser(null); }}>
+      <div style={{ marginTop: "auto", padding: "10px 14px", borderRadius: "10px", background: "#1a1a2e", cursor: "pointer" }} onClick={() => { localStorage.removeItem("wesal_token"); localStorage.removeItem("wesal_user"); setView("landing"); setUser(null); }}>
         <span style={{ color: "#ff6b6b", fontSize: "14px" }}>⬡ تسجيل الخروج</span>
       </div>
     </div>

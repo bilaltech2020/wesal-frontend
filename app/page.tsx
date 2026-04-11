@@ -117,13 +117,12 @@ export default function Home() {
       let found = false;
       for (const store of stores) {
         try {
-          const site = store.url.replace("https://", "").replace("http://", "").replace(/\/+$/, "");
-          const res = await fetch(`\${API_URL}/search-product`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sku, site }) });
+          const baseUrl = store.url.replace(/\/+$/, "");
+          const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(sku)}`;
+          const res = await fetch(`${API_URL}/scrape`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: searchUrl }) });
           const data = await res.json();
-          if (data.results && data.results.length > 0) {
-            data.results.slice(0, 2).forEach((p: any) => {
-              allResults.push({ sku, productName, storeName: store.name, price: p.price || "—", url: p.url, found: true });
-            });
+          if (data.name && data.name !== "0") {
+            allResults.push({ sku, productName, storeName: store.name, price: data.price || "—", url: searchUrl, found: true });
             found = true;
           }
         } catch {}
@@ -197,10 +196,12 @@ export default function Home() {
     setSkuInput("");
     await Promise.all(stores.map(async (store) => {
       try {
-        const site = store.url.replace("https://", "").replace("http://", "").replace(/\/+$/, "");
-        const res = await fetch(`${API_URL}/search-product`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sku, site }) });
+        const baseUrl = store.url.replace(/\/+$/, "");
+        const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(sku)}`;
+        const res = await fetch(`${API_URL}/scrape`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: searchUrl }) });
         const data = await res.json();
-        setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r => r.storeId !== store.id ? r : { ...r, count: data.count || 0, products: data.results || [], status: "done" as const }) }));
+        const prod = data.name && data.name !== "0" ? [{ name: data.name, url: searchUrl, price: data.price || "—", available: true, snippet: "" }] : [];
+        setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r => r.storeId !== store.id ? r : { ...r, count: prod.length, products: prod, status: "done" as const }) }));
       } catch {
         setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r => r.storeId !== store.id ? r : { ...r, status: "error" as const, error: "فشل الاتصال" }) }));
       }

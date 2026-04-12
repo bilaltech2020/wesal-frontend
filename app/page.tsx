@@ -88,6 +88,9 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [urlCol, setUrlCol] = useState("");
 
+  // Reports / KPIs
+  const [activeKpi, setActiveKpi] = useState<number | null>(null);
+
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;

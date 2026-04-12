@@ -25,14 +25,14 @@ interface InventoryResult {
 }
 interface InventorySearch { id: string; sku: string; results: InventoryResult[]; searchedAt: string; }
 
-type ViewType = "landing" | "login" | "register" | "dashboard" | "competitors" | "inventory";
+type ViewType = "landing" | "login" | "register" | "dashboard" | "competitors" | "inventory" | "reports";
 
 const NAV = [
   { icon: "⬡", label: "لوحة التحكم", v: "dashboard" },
   { icon: "🔍", label: "مراقبة المنافسين", v: "competitors" },
   { icon: "📦", label: "مراقبة المخزون", v: "inventory" },
   { icon: "◈", label: "التكاملات", v: "dashboard" },
-  { icon: "◇", label: "التقارير", v: "dashboard" },
+  { icon: "◇", label: "التقارير", v: "reports" },
   { icon: "○", label: "الإعدادات", v: "dashboard" },
 ];
 
@@ -246,6 +246,8 @@ export default function Home() {
     }));
     setSearching(false);
   };
+
+  const [activeKpi, setActiveKpi] = useState<number | null>(null);
 
   // ── Sidebar JSX ──
   const sidebarJSX = (
@@ -509,6 +511,235 @@ export default function Home() {
       </div>
     </div>
   );
+
+  // ══════════════════════════════════════
+  // REPORTS / KPI DASHBOARD VIEW
+  // ══════════════════════════════════════
+  if (view === "reports") {
+    const kpis = [
+      { n: "① الطلبات المتأخرة", val: "11", target: "الهدف: 0", trend: "↑37%", color: "#E24B4A", pct: 73 },
+      { n: "② الطلبات العالقة", val: "8", target: "مورد: 5 · شحن: 3", trend: "", color: "#EF9F27", pct: 53 },
+      { n: "③ وقت المعالجة", val: "2.4 يوم", target: "الهدف: 1.5 يوم", trend: "↑60%", color: "#EF9F27", pct: 60 },
+      { n: "④ المنتجات النافدة", val: "3", target: "يؤثر على 8 طلبات", trend: "", color: "#E24B4A", pct: 100 },
+      { n: "⑤ قريبة من النفاد", val: "7", target: "أقل من الحد الأدنى", trend: "", color: "#EF9F27", pct: 46 },
+      { n: "⑥ تأخير الموردين", val: "5", target: "POs متأخرة", trend: "↑25%", color: "#E24B4A", pct: 50 },
+      { n: "⑦ الشكاوى المفتوحة", val: "4", target: "بدون رد +24h: 2", trend: "", color: "#EF9F27", pct: 40 },
+      { n: "⑧ وقت الرد", val: "6.2h", target: "الهدف: 2h", trend: "↑210%", color: "#E24B4A", pct: 100 },
+      { n: "⑨ المبيعات اليومية", val: "24,850 ر.س", target: "الهدف: 20,000", trend: "↑24%", color: "#1D9E75", pct: 100 },
+      { n: "⑩ التوصيل في الوقت", val: "86%", target: "الهدف: 95%", trend: "↓9 نقاط", color: "#1D9E75", pct: 86 },
+    ];
+
+    const details: Record<number, React.ReactNode> = {
+      0: (<div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+          <div style={{ background: "#0f0f1a", borderRadius: "10px", padding: "12px" }}>
+            <div style={{ fontSize: "11px", color: "#666", marginBottom: "8px", fontWeight: "600" }}>أسباب التأخير</div>
+            {[["تأخير المورد","42%","#E24B4A"],["بوليصة الشحن","24%","#EF9F27"],["موظف لم يرفع PO","18%","#EF9F27"],["تأخير مستودع","10%","#378ADD"],["أخرى","6%","#888"]].map(([l,p,c])=>(
+              <div key={l as string} style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px" }}>
+                <span style={{ fontSize:"11px", minWidth:"140px", color:"#e8e8f0" }}>{l}</span>
+                <div style={{ flex:1, height:"5px", background:"#1a1a2e", borderRadius:"3px" }}><div style={{ width:p, height:"100%", background:c as string, borderRadius:"3px" }}></div></div>
+                <span style={{ fontSize:"11px", color:c as string, minWidth:"32px" }}>{p}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: "#0f0f1a", borderRadius: "10px", padding: "12px" }}>
+            <div style={{ fontSize: "11px", color: "#666", marginBottom: "8px", fontWeight: "600" }}>مراحل التأخير (h)</div>
+            {[["رفع PO","4.2h","1h","#E24B4A",80],["استلام المورد","28h","16h","#E24B4A",100],["إصدار البوليصة","12h","4h","#E24B4A",90],["شحن المنتج","36h","24h","#E24B4A",100]].map(([l,v,t,c,w])=>(
+              <div key={l as string} style={{ marginBottom:"8px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:"11px", marginBottom:"3px" }}>
+                  <span style={{ color:"#888" }}>{l}</span>
+                  <span style={{ color:c as string }}>{v} <span style={{ color:"#555" }}>الهدف: {t}</span></span>
+                </div>
+                <div style={{ height:"4px", background:"#1a1a2e", borderRadius:"3px" }}><div style={{ width:`${w}%`, height:"100%", background:c as string, borderRadius:"3px" }}></div></div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+          <thead><tr style={{ borderBottom:"1px solid #1e1e2e" }}>{["الطلب","التأخير","رفع PO","استلام","بوليصة","شحن","السبب","المسؤول","إجراء"].map(h=><th key={h} style={{ padding:"6px 8px", textAlign:"right", color:"#555", fontWeight:"500", whiteSpace:"nowrap" }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {[["ORD-0245","5 أيام","1h✓","3.2يوم↑","1يوم","—","مورد A","المورد A"],["ORD-0241","3 أيام","6h↑","0.5يوم✓","2.2يوم↑","—","بوليصة","SMSA"],["ORD-0238","2 يوم","18h↑","1يوم","2h✓","0.5يوم","موظف","أحمد م."]].map(([id,d,po,rec,bl,sh,cause,resp])=>(
+              <tr key={id} style={{ borderBottom:"1px solid #141420" }}>
+                <td style={{ padding:"6px 8px", color:"#c8b8ff" }}>{id}</td>
+                <td style={{ padding:"6px 8px" }}><span style={{ background:"#1f0d0d", color:"#f87171", padding:"1px 7px", borderRadius:"10px", fontSize:"10px" }}>{d}</span></td>
+                {[po,rec,bl,sh].map((v,i)=><td key={i} style={{ padding:"6px 8px", fontSize:"11px", color:(v as string).includes("↑")?"#f87171":(v as string).includes("✓")?"#4ade80":"#fbbf24" }}>{v}</td>)}
+                <td style={{ padding:"6px 8px" }}><span style={{ background:"#1f0d0d", color:"#f87171", padding:"1px 7px", borderRadius:"10px", fontSize:"10px" }}>{cause}</span></td>
+                <td style={{ padding:"6px 8px", fontSize:"11px", color:"#888" }}>{resp}</td>
+                <td style={{ padding:"6px 8px" }}><button style={{ padding:"2px 8px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"6px", color:"#c8b8ff", fontSize:"10px", cursor:"pointer" }}>إجراء</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ display:"flex", gap:"8px", marginTop:"10px" }}>
+          <button style={{ padding:"6px 12px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"8px", color:"#c8b8ff", fontSize:"11px", cursor:"pointer" }}>أنشئ مهام ↗</button>
+          <button style={{ padding:"6px 12px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"8px", color:"#c8b8ff", fontSize:"11px", cursor:"pointer" }}>واتساب ↗</button>
+          <button style={{ padding:"6px 12px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"8px", color:"#c8b8ff", fontSize:"11px", cursor:"pointer" }}>Excel ↗</button>
+        </div>
+      </div>),
+      2: (<div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:"8px", marginBottom:"12px" }}>
+          {[["وقت المعالجة","2.4 يوم","الهدف: 1.5","#E24B4A"],["متوسط PO","4.2h","الهدف: 1h","#E24B4A"],["متوسط البوليصة","12h","الهدف: 4h","#E24B4A"],["متوسط فاتورة","1,471 ر.س","↑2.9%","#185FA5"],["متوسط استلام","28h","الهدف: 16h","#EF9F27"]].map(([l,v,s,c])=>(
+            <div key={l as string} style={{ background:"#0f0f1a", borderRadius:"8px", padding:"10px", textAlign:"center" }}>
+              <div style={{ fontSize:"10px", color:"#666" }}>{l}</div>
+              <div style={{ fontSize:"18px", fontWeight:"500", color:c as string, margin:"4px 0" }}>{v}</div>
+              <div style={{ fontSize:"10px", color:"#555" }}>{s}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+          <div style={{ background:"#0f0f1a", borderRadius:"10px", padding:"12px" }}>
+            <div style={{ fontSize:"11px", color:"#666", marginBottom:"8px", fontWeight:"600" }}>تأخير الموظفين في رفع PO</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+              <thead><tr style={{ borderBottom:"1px solid #1e1e2e" }}>{["الموظف","الطلبات","في الوقت","متأخر","متوسط","الحالة"].map(h=><th key={h} style={{ padding:"5px 7px", textAlign:"right", color:"#555", fontWeight:"500" }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {[["أحمد م.","18","14","4","14h","#f87171","متأخر"],["سارة ع.","22","21","1","3.1h","#fbbf24","قريب"],["محمد ك.","15","15","0","0.8h","#4ade80","ممتاز"]].map(([n,t,ok,late,avg,c,status])=>(
+                  <tr key={n as string} style={{ borderBottom:"1px solid #141420" }}>
+                    <td style={{ padding:"5px 7px" }}>{n}</td>
+                    <td style={{ padding:"5px 7px", color:"#888" }}>{t}</td>
+                    <td style={{ padding:"5px 7px", color:"#4ade80" }}>{ok}</td>
+                    <td style={{ padding:"5px 7px", color:"#f87171" }}>{late}</td>
+                    <td style={{ padding:"5px 7px", color:c as string, fontWeight:"500" }}>{avg}</td>
+                    <td style={{ padding:"5px 7px" }}><span style={{ background:(c as string)==="#f87171"?"#1f0d0d":"#0d1f0d", color:c as string, padding:"1px 6px", borderRadius:"10px", fontSize:"10px" }}>{status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ background:"#0f0f1a", borderRadius:"10px", padding:"12px" }}>
+            <div style={{ fontSize:"11px", color:"#666", marginBottom:"8px", fontWeight:"600" }}>متوسط استلام المنتجات من المورد</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+              <thead><tr style={{ borderBottom:"1px solid #1e1e2e" }}>{["المورد","متوسط","الهدف","في الوقت","الحالة"].map(h=><th key={h} style={{ padding:"5px 7px", textAlign:"right", color:"#555", fontWeight:"500" }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {[["المورد A","42h","16h","50%","#f87171","ضعيف"],["المورد B","24h","16h","75%","#fbbf24","متوسط"],["المورد C","12h","16h","93%","#4ade80","ممتاز"]].map(([n,v,t,ok,c,status])=>(
+                  <tr key={n as string} style={{ borderBottom:"1px solid #141420" }}>
+                    <td style={{ padding:"5px 7px" }}>{n}</td>
+                    <td style={{ padding:"5px 7px", color:c as string, fontWeight:"500" }}>{v}</td>
+                    <td style={{ padding:"5px 7px", color:"#555" }}>{t}</td>
+                    <td style={{ padding:"5px 7px", color:c as string }}>{ok}</td>
+                    <td style={{ padding:"5px 7px" }}><span style={{ background:(c as string)==="#f87171"?"#1f0d0d":"#0d1f0d", color:c as string, padding:"1px 6px", borderRadius:"10px", fontSize:"10px" }}>{status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>),
+    };
+
+    return (
+      <div style={{ fontFamily:"'Tajawal', sans-serif", direction:"rtl", minHeight:"100vh", background:"#0a0a0f", color:"#e8e8f0" }}>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+        <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}`}</style>
+        <div style={{ display:"flex", minHeight:"100vh" }}>
+          {sidebarJSX}
+          <div style={{ flex:1, padding:"32px", overflowY:"auto" }}>
+
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
+              <div>
+                <h1 style={{ fontSize:"22px", fontWeight:"800", margin:"0 0 4px" }}>لوحة KPIs 📊</h1>
+                <p style={{ color:"#555", fontSize:"13px", margin:0 }}>اضغط على أي مؤشر لرؤية التفاصيل الكاملة</p>
+              </div>
+              <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
+                {["اليوم","الأسبوع","الشهر","الربع"].map((p,i)=>(
+                  <button key={p} style={{ padding:"5px 11px", background:i===1?"#1a1a2e":"transparent", border:"1px solid "+( i===1?"#c8b8ff":"#2a2a3e"), borderRadius:"7px", color:i===1?"#c8b8ff":"#666", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>{p}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* KPI Grid Row 1 */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:"10px", marginBottom:"10px" }}>
+              {kpis.slice(0,5).map((k,i)=>(
+                <div key={i} onClick={()=>setActiveKpi(activeKpi===i?null:i)}
+                  style={{ background:"#111118", border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`, borderTop:`3px solid ${k.color}`, borderRadius:"12px", padding:"14px", cursor:"pointer", position:"relative", boxShadow:activeKpi===i?"0 0 0 2px rgba(55,138,221,0.2)":"none" }}>
+                  <div style={{ width:"7px", height:"7px", borderRadius:"50%", background:k.color, position:"absolute", top:"10px", left:"10px" }}></div>
+                  <div style={{ fontSize:"11px", color:"#666", marginBottom:"5px" }}>{k.n}</div>
+                  <div style={{ fontSize:"22px", fontWeight:"700", color:k.color, marginBottom:"3px" }}>{k.val}</div>
+                  <div style={{ fontSize:"10px", color:"#555" }}>{k.target} {k.trend && <span style={{ color:k.color }}>{k.trend}</span>}</div>
+                  <div style={{ height:"3px", background:"#1a1a2e", borderRadius:"2px", marginTop:"8px" }}><div style={{ width:`${k.pct}%`, height:"100%", background:k.color, borderRadius:"2px" }}></div></div>
+                </div>
+              ))}
+            </div>
+
+            {/* Detail for row 1 */}
+            {activeKpi !== null && activeKpi < 5 && details[activeKpi] && (
+              <div style={{ background:"#111118", border:"1px solid #378ADD", borderRadius:"14px", padding:"20px", marginBottom:"10px", animation:"fadeIn .2s ease" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"14px" }}>
+                  <span style={{ fontSize:"14px", fontWeight:"700", color:"#e8e8f0" }}>{kpis[activeKpi].n} — تفاصيل</span>
+                  <button onClick={()=>setActiveKpi(null)} style={{ padding:"4px 10px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"6px", color:"#888", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>✕ إغلاق</button>
+                </div>
+                {details[activeKpi]}
+              </div>
+            )}
+            {activeKpi !== null && activeKpi < 5 && !details[activeKpi] && (
+              <div style={{ background:"#111118", border:"1px solid #378ADD", borderRadius:"14px", padding:"20px", marginBottom:"10px", animation:"fadeIn .2s ease" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"14px" }}>
+                  <span style={{ fontSize:"14px", fontWeight:"700" }}>{kpis[activeKpi].n} — تفاصيل</span>
+                  <button onClick={()=>setActiveKpi(null)} style={{ padding:"4px 10px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"6px", color:"#888", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>✕ إغلاق</button>
+                </div>
+                <p style={{ color:"#555", fontSize:"13px" }}>بيانات تفصيلية ستُجلب من ERPNext عند الربط.</p>
+              </div>
+            )}
+
+            {/* KPI Grid Row 2 */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:"10px", marginBottom:"10px" }}>
+              {kpis.slice(5).map((k,ii)=>{
+                const i = ii+5;
+                return (
+                  <div key={i} onClick={()=>setActiveKpi(activeKpi===i?null:i)}
+                    style={{ background:"#111118", border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`, borderTop:`3px solid ${k.color}`, borderRadius:"12px", padding:"14px", cursor:"pointer", position:"relative", boxShadow:activeKpi===i?"0 0 0 2px rgba(55,138,221,0.2)":"none" }}>
+                    <div style={{ width:"7px", height:"7px", borderRadius:"50%", background:k.color, position:"absolute", top:"10px", left:"10px" }}></div>
+                    <div style={{ fontSize:"11px", color:"#666", marginBottom:"5px" }}>{k.n}</div>
+                    <div style={{ fontSize:"22px", fontWeight:"700", color:k.color, marginBottom:"3px" }}>{k.val}</div>
+                    <div style={{ fontSize:"10px", color:"#555" }}>{k.target} {k.trend && <span style={{ color:k.color }}>{k.trend}</span>}</div>
+                    <div style={{ height:"3px", background:"#1a1a2e", borderRadius:"2px", marginTop:"8px" }}><div style={{ width:`${k.pct}%`, height:"100%", background:k.color, borderRadius:"2px" }}></div></div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Detail for row 2 */}
+            {activeKpi !== null && activeKpi >= 5 && (
+              <div style={{ background:"#111118", border:"1px solid #378ADD", borderRadius:"14px", padding:"20px", marginBottom:"10px", animation:"fadeIn .2s ease" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"14px" }}>
+                  <span style={{ fontSize:"14px", fontWeight:"700" }}>{kpis[activeKpi].n} — تفاصيل</span>
+                  <button onClick={()=>setActiveKpi(null)} style={{ padding:"4px 10px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"6px", color:"#888", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>✕ إغلاق</button>
+                </div>
+                <p style={{ color:"#555", fontSize:"13px" }}>بيانات تفصيلية ستُجلب من ERPNext عند الربط.</p>
+              </div>
+            )}
+
+            {/* Summary Table */}
+            <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"14px", overflow:"hidden" }}>
+              <div style={{ padding:"14px 20px", borderBottom:"1px solid #1e1e2e", fontSize:"13px", fontWeight:"600" }}>ملخص تنفيذي — حالة جميع KPIs</div>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+                <thead><tr style={{ background:"#0a0a0f" }}>{["#","المؤشر","القيمة","الهدف","الفجوة","الاتجاه","الحالة","أولوية"].map(h=><th key={h} style={{ padding:"8px 12px", textAlign:"right", color:"#555", fontWeight:"500", borderBottom:"1px solid #1e1e2e", whiteSpace:"nowrap" }}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {[["1","الطلبات المتأخرة","11","0","11","↑37%","حرج","عاجل","#f87171"],["2","الطلبات العالقة","8","2","6","↑20%","تحذير","مهم","#fbbf24"],["3","وقت المعالجة","2.4 يوم","1.5 يوم","0.9 يوم","↑60%","تحذير","مهم","#fbbf24"],["4","المنتجات النافدة","3 SKUs","0","3","جديد","حرج","عاجل","#f87171"],["5","قريبة من النفاد","7 SKUs","0","7","↑40%","تحذير","مهم","#fbbf24"],["6","تأخير الموردين","5 POs","0","5","↑25%","حرج","عاجل","#f87171"],["7","الشكاوى المفتوحة","4","0","4","↑33%","تحذير","مهم","#fbbf24"],["8","وقت الرد","6.2h","2h","4.2h","↑210%","حرج","عاجل","#f87171"],["9","المبيعات اليومية","24,850 ر.س","20,000","+4,850","↑24%","ممتاز","جيد","#4ade80"],["10","التوصيل في الوقت","86%","95%","-9%","↓9نقاط","تحذير","مهم","#fbbf24"]].map(([n,name,val,target,gap,trend,status,priority,c])=>(
+                    <tr key={n} style={{ borderBottom:"1px solid #141420" }}>
+                      <td style={{ padding:"8px 12px", color:"#555" }}>{n}</td>
+                      <td style={{ padding:"8px 12px" }}>{name}</td>
+                      <td style={{ padding:"8px 12px", fontWeight:"600", color:c as string }}>{val}</td>
+                      <td style={{ padding:"8px 12px", color:"#888" }}>{target}</td>
+                      <td style={{ padding:"8px 12px", color:c as string }}>{gap}</td>
+                      <td style={{ padding:"8px 12px", color:c as string }}>{trend}</td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ background:(c as string)==="#f87171"?"#1f0d0d":(c as string)==="#4ade80"?"#0d1f0d":"#1a1400", color:c as string, padding:"2px 8px", borderRadius:"10px", fontSize:"10px" }}>{status}</span></td>
+                      <td style={{ padding:"8px 12px" }}><span style={{ background:(c as string)==="#f87171"?"#1f0d0d":(c as string)==="#4ade80"?"#0d1f0d":"#1a1400", color:c as string, padding:"2px 8px", borderRadius:"10px", fontSize:"10px" }}>{priority}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ padding:"12px 16px", display:"flex", gap:"8px" }}>
+                <button style={{ padding:"7px 14px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"8px", color:"#c8b8ff", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>تصدير Excel ↗</button>
+                <button style={{ padding:"7px 14px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"8px", color:"#c8b8ff", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>إرسال واتساب ↗</button>
+                <button style={{ padding:"7px 14px", background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:"8px", color:"#c8b8ff", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>PDF تنفيذي ↗</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ══════════════════════════════════════
   // COMPETITORS VIEW

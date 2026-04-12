@@ -86,6 +86,7 @@ export default function Home() {
   const [excelResults, setExcelResults] = useState<{sku:string; productName:string; storeName:string; price:string; url:string; found:boolean}[]>([]);
   const [excelFileName, setExcelFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [urlCol, setUrlCol] = useState("");
 
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -102,6 +103,9 @@ export default function Home() {
       setExcelCols(cols);
       setSearchCol(cols[0]);
       setNameCol(cols[0]);
+      // Auto-detect URL column
+      const urlColCandidate = cols.find(c => c.toLowerCase().includes("url") || c.toLowerCase().includes("link"));
+      setUrlCol(urlColCandidate || "");
       setExcelRows(rows);
     }
   };
@@ -116,11 +120,26 @@ export default function Home() {
       const productName = String(row[nameCol] || sku).trim();
       if (!sku) continue;
       let found = false;
-      for (const store of stores) {
+      // إذا عندنا عمود URL، نستخدمه مباشرة بدون المتاجر
+      const directUrl = urlCol ? String(row[urlCol] || "").trim() : "";
+      if (directUrl && directUrl.startsWith("http")) {
         try {
-          let fetchUrl: string;
-          if (store.urlTemplate && store.urlTemplate.includes("{SKU}")) {
-            fetchUrl = store.urlTemplate.replace("{SKU}", encodeURIComponent(sku));
+          const res = await fetch(`${API_URL}/scrape-dynamic`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: directUrl }) });
+          const data = await res.json();
+          if (data.name && data.name !== "0") {
+            allResults.push({ sku, productName, storeName: "مباشر", price: data.price || "—", url: directUrl, found: true });
+            found = true;
+          }
+        } catch {}
+      } else {
+        for (const store of stores) {
+          try {
+            let fetchUrl: string;
+            if (store.urlTemplate && store.urlTemplate.includes("{SKU}")) {
+              fetchUrl = store.urlTemplate.replace("{SKU}", encodeURIComponent(sku));
+            } else {
+              fetchUrl = `${store.url.replace(/\/+$/, "")}/search?q=${encodeURIComponent(sku)}`;
+            }
             const res2 = await fetch(`${API_URL}/scrape-dynamic`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: fetchUrl }) });
             const data2 = await res2.json();
             if (data2.name && data2.name !== "0") {
@@ -132,18 +151,8 @@ export default function Home() {
               });
               found = true;
             }
-            continue;
-          }
-          const site = store.url.replace("https://", "").replace("http://", "").replace(/\/+$/, "");
-          const res = await fetch(`${API_URL}/search-product`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sku, site }) });
-          const data = await res.json();
-          if (data.results && data.results.length > 0) {
-            data.results.slice(0, 3).forEach((p: any) => {
-              allResults.push({ sku, productName, storeName: store.name, price: p.price || "—", url: p.url, found: true });
-            });
-            found = true;
-          }
-        } catch {}
+          } catch {}
+        }
       }
       if (!found) allResults.push({ sku, productName, storeName: "—", price: "—", url: "", found: false });
       setExcelResults([...allResults]);
@@ -324,9 +333,9 @@ export default function Home() {
                       <button onClick={() => { setExcelRows([]); setExcelCols([]); setExcelResults([]); setExcelFileName(""); }} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "13px" }}>✕</button>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "14px" }}>
                       <div>
-                        <p style={{ margin: "0 0 6px", fontSize: "12px", color: "#666" }}>عمود البحث (SKU أو الاسم)</p>
+                        <p style={{ margin: "0 0 6px", fontSize: "12px", color: "#666" }}>عمود البحث (SKU)</p>
                         <select value={searchCol} onChange={e => setSearchCol(e.target.value)} style={{ ...inputStyle, padding: "8px 12px" }}>
                           {excelCols.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
@@ -337,7 +346,15 @@ export default function Home() {
                           {excelCols.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
+                      <div>
+                        <p style={{ margin: "0 0 6px", fontSize: "12px", color: "#666" }}>عمود URL (اختياري)</p>
+                        <select value={urlCol} onChange={e => setUrlCol(e.target.value)} style={{ ...inputStyle, padding: "8px 12px" }}>
+                          <option value="">-- بدون --</option>
+                          {excelCols.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
                     </div>
+                    {urlCol && <p style={{ margin: "0 0 12px", fontSize: "11px", color: "#4ade80" }}>✓ سيبحث مباشرة من عمود الـ URL — لا يحتاج متاجر</p>}
 
                     {/* Preview */}
                     <div style={{ background: "#0a0a0f", border: "1px solid #1e1e2e", borderRadius: "8px", overflow: "hidden", marginBottom: "14px" }}>

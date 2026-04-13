@@ -97,10 +97,12 @@ export default function Home() {
   const [lastFetched, setLastFetched] = useState("");
   const [timePeriod, setTimePeriod] = useState(1);
 
-  const fetchKpis = async () => {
+  const fetchKpis = async (periodIdx?: number) => {
+    const idx = periodIdx !== undefined ? periodIdx : timePeriod;
+    const pm: Record<number,string> = {0:"day",1:"week",2:"month",3:"quarter",4:"year"};
     setErpLoading(true); setErpError("");
     try {
-      const res = await fetch(`${API_URL}/erpnext-kpis`);
+      const res = await fetch(`${API_URL}/erpnext-kpis?period=${pm[idx]||"week"}`);
       const json = await res.json();
       if (json.status === "ok") {
         setErpData(json.data);
@@ -613,8 +615,8 @@ export default function Home() {
                 </div>
               </div>
               <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-                {["اليوم","الأسبوع","الشهر","الربع"].map((p,i)=>(
-                  <button key={p} onClick={()=>setTimePeriod(i)} style={{padding:"5px 11px",background:timePeriod===i?"#1a1a2e":"transparent",border:"1px solid "+(timePeriod===i?"#c8b8ff":"#2a2a3e"),borderRadius:"7px",color:timePeriod===i?"#c8b8ff":"#666",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
+                {["اليوم","الأسبوع","الشهر","الربع","السنة"].map((p,i)=>(
+                  <button key={p} onClick={()=>{ setTimePeriod(i); fetchKpis(i); }} style={{padding:"5px 11px",background:timePeriod===i?"#1a1a2e":"transparent",border:"1px solid "+(timePeriod===i?"#c8b8ff":"#2a2a3e"),borderRadius:"7px",color:timePeriod===i?"#c8b8ff":"#666",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
                 ))}
                 <button onClick={fetchKpis} disabled={erpLoading} style={{padding:"5px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"7px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>↻ تحديث</button>
               </div>

@@ -550,113 +550,404 @@ export default function Home() {
 
 
   // ══════════════════════════════════════
+
+  // ══════════════════════════════════════
   // REPORTS / KPI DASHBOARD VIEW
   // ══════════════════════════════════════
   if (view === "reports") {
     const d = erpData;
+
+    // ── KPI Definitions ──
     const kpis = [
-      { n: "① الطلبات المتأخرة", val: d ? String(d.late_orders?.count ?? "—") : "—", target: "الهدف: 0", trend: d?.late_orders?.count > 0 ? `${d.late_orders.count} طلب` : "✓", color: d ? (d.late_orders?.count > 0 ? "#E24B4A" : "#1D9E75") : "#555", pct: d ? Math.min(100,(d.late_orders?.count??0)*10) : 0, rawKey: "late_orders" },
-      { n: "② الطلبات العالقة", val: d ? String(d.stuck_orders?.count ?? "—") : "—", target: d ? `${d.stuck_orders?.count??0} طلب عالق` : "—", trend: "", color: d ? (d.stuck_orders?.count > 3 ? "#E24B4A" : "#EF9F27") : "#555", pct: d ? Math.min(100,(d.stuck_orders?.count??0)*12) : 0, rawKey: "stuck_orders" },
-      { n: "③ وقت المعالجة", val: d ? `${d.avg_processing_days?.value??"—"} يوم` : "—", target: "الهدف: 1.5 يوم", trend: d?.avg_processing_days?.value>1.5 ? `↑${Math.round(((d.avg_processing_days.value-1.5)/1.5)*100)}%` : "✓", color: d ? (d.avg_processing_days?.value>1.5 ? "#EF9F27" : "#1D9E75") : "#555", pct: d ? Math.min(100,((d.avg_processing_days?.value??0)/3)*100) : 0, rawKey: "avg_processing_days" },
-      { n: "④ المنتجات النافدة", val: d ? String(d.out_of_stock?.count??"—") : "—", target: d ? `${d.out_of_stock?.count??0} SKU` : "—", trend: "", color: d ? (d.out_of_stock?.count>0 ? "#E24B4A" : "#1D9E75") : "#555", pct: d ? Math.min(100,(d.out_of_stock?.count??0)*10) : 0, rawKey: "out_of_stock" },
-      { n: "⑤ قريبة من النفاد", val: d ? String(d.low_stock?.count??"—") : "—", target: "أقل من الحد الأدنى", trend: "", color: d ? (d.low_stock?.count>5 ? "#E24B4A" : "#EF9F27") : "#555", pct: d ? Math.min(100,(d.low_stock?.count??0)*8) : 0, rawKey: "low_stock" },
-      { n: "⑥ تأخير الموردين", val: d ? String(d.late_po?.count??"—") : "—", target: "POs متأخرة", trend: d?.late_po?.count>0 ? `${d.late_po.count} PO` : "✓", color: d ? (d.late_po?.count>0 ? "#E24B4A" : "#1D9E75") : "#555", pct: d ? Math.min(100,(d.late_po?.count??0)*12) : 0, rawKey: "late_po" },
-      { n: "⑦ الشكاوى المفتوحة", val: d ? String(d.open_complaints?.count??"—") : "—", target: d ? `بدون رد: ${d.open_complaints?.no_reply_24h??0}` : "—", trend: "", color: d ? (d.open_complaints?.count>2 ? "#E24B4A" : "#EF9F27") : "#555", pct: d ? Math.min(100,(d.open_complaints?.count??0)*15) : 0, rawKey: "open_complaints" },
-      { n: "⑧ وقت الرد", val: d ? `${d.avg_response_hours?.value??"—"}h` : "—", target: "الهدف: 2h", trend: d?.avg_response_hours?.value>2 ? `↑${Math.round(((d.avg_response_hours.value-2)/2)*100)}%` : "✓", color: d ? (d.avg_response_hours?.value>2 ? "#E24B4A" : "#1D9E75") : "#555", pct: d ? Math.min(100,((d.avg_response_hours?.value??0)/8)*100) : 0, rawKey: "avg_response_hours" },
-      { n: "⑨ المبيعات اليومية", val: d ? `${(d.daily_sales?.value??0).toLocaleString("ar-SA")} ر.س` : "—", target: "الهدف: 20,000 ر.س", trend: d?.daily_sales?.value>=20000 ? `↑${Math.round(((d.daily_sales.value-20000)/20000)*100)}%` : "↓", color: d ? (d.daily_sales?.value>=20000 ? "#1D9E75" : "#EF9F27") : "#555", pct: d ? Math.min(100,((d.daily_sales?.value??0)/20000)*100) : 0, rawKey: "daily_sales" },
-      { n: "⑩ التوصيل في الوقت", val: d ? `${d.on_time_delivery?.pct??"—"}%` : "—", target: "الهدف: 95%", trend: d?.on_time_delivery?.pct<95 ? `↓${95-(d.on_time_delivery?.pct??0)} نقطة` : "✓", color: d ? ((d.on_time_delivery?.pct??0)>=95 ? "#1D9E75" : (d.on_time_delivery?.pct??0)>=80 ? "#EF9F27" : "#E24B4A") : "#555", pct: d?.on_time_delivery?.pct??0, rawKey: "on_time_delivery" },
+      { n: "الطلبات المتأخرة", icon: "🚨", val: d ? String(d.late_orders?.count ?? "—") : "—", target: "0", unit: "طلب", color: d ? (d.late_orders?.count > 0 ? "#E24B4A" : "#1D9E75") : "#555", pct: d ? Math.min(100,(d.late_orders?.count??0)*2) : 0, rawKey: "late_orders", priority: d?.late_orders?.count > 10 ? "critical" : d?.late_orders?.count > 5 ? "medium" : "low" },
+      { n: "الطلبات العالقة", icon: "⏸", val: d ? String(d.stuck_orders?.count ?? "—") : "—", target: "2", unit: "طلب", color: d ? (d.stuck_orders?.count > 3 ? "#E24B4A" : "#EF9F27") : "#555", pct: d ? Math.min(100,(d.stuck_orders?.count??0)*8) : 0, rawKey: "stuck_orders", priority: d?.stuck_orders?.count > 8 ? "critical" : "medium" },
+      { n: "وقت المعالجة", icon: "⏱", val: d ? `${d.avg_processing_days?.value??"—"}` : "—", target: "1.5", unit: "يوم", color: d ? (d.avg_processing_days?.value>1.5 ? "#EF9F27" : "#1D9E75") : "#555", pct: d ? Math.min(100,((d.avg_processing_days?.value??0)/3)*100) : 0, rawKey: "avg_processing_days", priority: d?.avg_processing_days?.value > 3 ? "critical" : "medium" },
+      { n: "المنتجات النافدة", icon: "📦", val: d ? String(d.out_of_stock?.count??"—") : "—", target: "0", unit: "SKU", color: d ? (d.out_of_stock?.count>0 ? "#E24B4A" : "#1D9E75") : "#555", pct: d ? Math.min(100,(d.out_of_stock?.count??0)*5) : 0, rawKey: "out_of_stock", priority: d?.out_of_stock?.count > 5 ? "critical" : d?.out_of_stock?.count > 0 ? "medium" : "low" },
+      { n: "قريبة من النفاد", icon: "⚠️", val: d ? String(d.low_stock?.count??"—") : "—", target: "0", unit: "SKU", color: d ? (d.low_stock?.count>5 ? "#E24B4A" : "#EF9F27") : "#555", pct: d ? Math.min(100,(d.low_stock?.count??0)*5) : 0, rawKey: "low_stock", priority: "medium" },
+      { n: "تأخير الموردين", icon: "🏭", val: d ? String(d.late_po?.count??"—") : "—", target: "0", unit: "PO", color: d ? (d.late_po?.count>0 ? "#E24B4A" : "#1D9E75") : "#555", pct: d ? Math.min(100,(d.late_po?.count??0)*6) : 0, rawKey: "late_po", priority: d?.late_po?.count > 5 ? "critical" : "medium" },
+      { n: "الشكاوى المفتوحة", icon: "💬", val: d ? String(d.open_complaints?.count??"—") : "—", target: "0", unit: "شكوى", color: d ? (d.open_complaints?.count>2 ? "#E24B4A" : "#EF9F27") : "#555", pct: d ? Math.min(100,(d.open_complaints?.count??0)*10) : 0, rawKey: "open_complaints", priority: d?.open_complaints?.count > 5 ? "critical" : "medium" },
+      { n: "وقت الرد", icon: "📞", val: d ? `${d.avg_response_hours?.value??"—"}` : "—", target: "2", unit: "ساعة", color: d ? (d.avg_response_hours?.value>2 ? "#E24B4A" : "#1D9E75") : "#555", pct: d ? Math.min(100,((d.avg_response_hours?.value??0)/8)*100) : 0, rawKey: "avg_response_hours", priority: d?.avg_response_hours?.value > 6 ? "critical" : "medium" },
+      { n: "المبيعات", icon: "💰", val: d ? `${(d.daily_sales?.value??0).toLocaleString("ar-SA")}` : "—", target: "20,000", unit: "ر.س", color: d ? (d.daily_sales?.value>=20000 ? "#1D9E75" : "#EF9F27") : "#555", pct: d ? Math.min(100,((d.daily_sales?.value??0)/20000)*100) : 0, rawKey: "daily_sales", priority: "low" },
+      { n: "التوصيل في الوقت", icon: "🚚", val: d ? `${d.on_time_delivery?.pct??"—"}` : "—", target: "95", unit: "%", color: d ? ((d.on_time_delivery?.pct??0)>=95 ? "#1D9E75" : (d.on_time_delivery?.pct??0)>=80 ? "#EF9F27" : "#E24B4A") : "#555", pct: d?.on_time_delivery?.pct??0, rawKey: "on_time_delivery", priority: (d?.on_time_delivery?.pct??0) < 80 ? "critical" : "medium" },
     ];
 
-    const renderDetail = (idx: number) => {
-      if (!d) return <p style={{color:"#555",fontSize:"13px",textAlign:"center",padding:"16px"}}>جاري تحميل البيانات من ERPNext...</p>;
-      const raw = d[kpis[idx]?.rawKey];
-      if (raw?.error) return <p style={{color:"#f87171",fontSize:"12px"}}>⚠️ {raw.error}</p>;
+    // ── AI Analysis Generator ──
+    const generateAIAnalysis = (key: string, raw: any) => {
+      if (!raw) return null;
+      const items = raw.items || [];
+      const count = raw.count || 0;
+
+      if (key === "late_orders" && items.length > 0) {
+        // تحليل المورد الأكثر تأخيراً
+        const supplierCount: Record<string,number> = {};
+        const skuCount: Record<string,number> = {};
+        items.forEach((o: any) => {
+          if (o.customer) supplierCount[o.customer] = (supplierCount[o.customer]||0) + 1;
+        });
+        const topCustomer = Object.entries(supplierCount).sort((a,b)=>b[1]-a[1])[0];
+        const avgDelay = items.length > 0 ? Math.round(items.reduce((s:number,o:any)=>s+(o.days_late||0),0)/items.length) : 0;
+        const criticalOrders = items.filter((o:any)=>(o.days_late||0)>30).length;
+        return {
+          insights: [
+            topCustomer ? `${topCustomer[0]} صاحب ${Math.round(topCustomer[1]/count*100)}% من الطلبات المتأخرة` : null,
+            `متوسط التأخير ${avgDelay} يوم لكل طلب`,
+            criticalOrders > 0 ? `${criticalOrders} طلب متأخر أكثر من 30 يوم — حرج جداً` : null,
+            `إجمالي ${count} طلب بحاجة لإجراء فوري`,
+          ].filter(Boolean),
+          recommendations: [
+            "تواصل مع العملاء المتأثرين فوراً",
+            avgDelay > 14 ? "راجع سياسة التسليم مع فريق اللوجستيات" : "سرّع عمليات الشحن المعلقة",
+            "أنشئ تقرير أسبوعي لمتابعة الطلبات المتأخرة",
+          ],
+          score: Math.min(100, count * 2),
+        };
+      }
+
+      if (key === "late_po" && items.length > 0) {
+        const supplierCount: Record<string,number> = {};
+        items.forEach((o: any) => {
+          if (o.supplier) supplierCount[o.supplier] = (supplierCount[o.supplier]||0) + 1;
+        });
+        const topSupplier = Object.entries(supplierCount).sort((a,b)=>b[1]-a[1])[0];
+        return {
+          insights: [
+            topSupplier ? `المورد "${topSupplier[0]}" متأخر في ${topSupplier[1]} طلبية` : null,
+            `${count} PO متأخرة تؤثر على جدول التسليم`,
+            count > 10 ? "مستوى حرج — يتطلب تدخل فوري" : "يتطلب متابعة عاجلة",
+          ].filter(Boolean),
+          recommendations: [
+            topSupplier ? `راجع عقد المورد "${topSupplier[0]}" وطالب بجدول زمني` : "اتصل بجميع الموردين المتأخرين",
+            "فعّل نظام تنبيه تلقائي قبل 3 أيام من موعد الاستلام",
+            "ابحث عن موردين بديلين للمنتجات الحرجة",
+          ],
+          score: Math.min(100, count * 6),
+        };
+      }
+
+      if (key === "out_of_stock" && items.length > 0) {
+        return {
+          insights: [
+            `${count} منتج نفد من المخزون`,
+            `يؤثر مباشرة على تنفيذ الطلبات`,
+            count > 10 ? "خطر على المبيعات — تصرف الآن" : "يحتاج إعادة طلب عاجلة",
+          ],
+          recommendations: [
+            "أرسل Purchase Orders فورية للموردين",
+            "أعلم فريق المبيعات بالمنتجات غير المتوفرة",
+            "فعّل إشعارات نفاد المخزون التلقائية في ERPNext",
+          ],
+          score: Math.min(100, count * 10),
+        };
+      }
+
+      if (key === "open_complaints" && items.length > 0) {
+        const noReply = raw.no_reply_24h || 0;
+        return {
+          insights: [
+            `${count} شكوى مفتوحة بحاجة للمتابعة`,
+            noReply > 0 ? `${noReply} شكوى بدون رد منذ أكثر من 24 ساعة` : "جميع الشكاوى تلقت رداً",
+            count > 5 ? "يؤثر على تقييم الخدمة ورضا العملاء" : null,
+          ].filter(Boolean),
+          recommendations: [
+            noReply > 0 ? `ردّ على ${noReply} شكوى فوراً قبل انتهاء وقت الرد` : "حافظ على معدل الرد الجيد",
+            "أضف قالب ردود سريعة للمشاكل المتكررة",
+            "تتبع أسباب الشكاوى لمنعها مستقبلاً",
+          ],
+          score: Math.min(100, count * 8 + noReply * 12),
+        };
+      }
+
+      // Generic analysis
+      return {
+        insights: [`${count} حالة تحتاج متابعة`, count > 5 ? "تجاوز الحد المقبول" : "ضمن النطاق المقبول"],
+        recommendations: ["راجع التفاصيل وخذ الإجراء المناسب"],
+        score: Math.min(100, count * 5),
+      };
+    };
+
+    // ── Priority Groups ──
+    const critical = kpis.filter(k => k.priority === "critical");
+    const medium = kpis.filter(k => k.priority === "medium");
+    const low = kpis.filter(k => k.priority === "low");
+
+    // ── Drill-down Panel ──
+    const renderDrillDown = (idx: number) => {
+      const k = kpis[idx];
+      const raw = d?.[k.rawKey];
       const items = raw?.items ?? [];
-      const key = kpis[idx]?.rawKey;
-      if (["late_orders","stuck_orders"].includes(key)) {
-        if (!items.length) return <p style={{color:"#4ade80",textAlign:"center",padding:"16px"}}>✓ لا توجد طلبات {key==="late_orders"?"متأخرة":"عالقة"}</p>;
-        return (<table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}><thead><tr style={{borderBottom:"1px solid #1e1e2e"}}>{["الطلب","العميل","التأخير/الحالة","التاريخ","المبلغ"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:"right",color:"#555",fontWeight:"500"}}>{h}</th>)}</tr></thead><tbody>{items.map((o: any)=>(<tr key={o.id} style={{borderBottom:"1px solid #141420"}}><td style={{padding:"6px 8px",color:"#c8b8ff",fontSize:"11px"}}>{o.id}</td><td style={{padding:"6px 8px"}}>{o.customer}</td><td style={{padding:"6px 8px"}}><span style={{background:"#1f0d0d",color:"#f87171",padding:"1px 7px",borderRadius:"10px",fontSize:"10px"}}>{key==="late_orders"?`${o.days_late} يوم`:o.status}</span></td><td style={{padding:"6px 8px",color:"#888",fontSize:"11px"}}>{o.delivery_date||o.date}</td><td style={{padding:"6px 8px",color:"#fbbf24",fontSize:"11px"}}>{o.amount?`${Number(o.amount).toLocaleString()} ر.س`:"—"}</td></tr>))}</tbody></table>);
-      }
-      if (["out_of_stock","low_stock"].includes(key)) {
-        if (!items.length) return <p style={{color:"#4ade80",textAlign:"center",padding:"16px"}}>✓ {key==="out_of_stock"?"لا توجد منتجات نافدة":"المخزون بمستوى جيد"}</p>;
-        return (<table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}><thead><tr style={{borderBottom:"1px solid #1e1e2e"}}>{["SKU","المستودع","الكمية"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:"right",color:"#555",fontWeight:"500"}}>{h}</th>)}</tr></thead><tbody>{items.map((i: any,idx2: number)=>(<tr key={idx2} style={{borderBottom:"1px solid #141420"}}><td style={{padding:"6px 8px",color:"#c8b8ff"}}>{i.sku}</td><td style={{padding:"6px 8px",color:"#888"}}>{i.warehouse}</td><td style={{padding:"6px 8px"}}><span style={{background:key==="out_of_stock"?"#1f0d0d":"#1a1400",color:key==="out_of_stock"?"#f87171":"#fbbf24",padding:"1px 7px",borderRadius:"10px",fontSize:"10px"}}>{i.qty}</span></td></tr>))}</tbody></table>);
-      }
-      if (key==="late_po") {
-        if (!items.length) return <p style={{color:"#4ade80",textAlign:"center",padding:"16px"}}>✓ لا توجد POs متأخرة</p>;
-        return (<table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}><thead><tr style={{borderBottom:"1px solid #1e1e2e"}}>{["PO","المورد","الاستحقاق","الحالة"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:"right",color:"#555",fontWeight:"500"}}>{h}</th>)}</tr></thead><tbody>{items.map((o: any)=>(<tr key={o.id} style={{borderBottom:"1px solid #141420"}}><td style={{padding:"6px 8px",color:"#c8b8ff",fontSize:"11px"}}>{o.id}</td><td style={{padding:"6px 8px"}}>{o.supplier}</td><td style={{padding:"6px 8px",color:"#f87171"}}>{o.due}</td><td style={{padding:"6px 8px"}}><span style={{background:"#1f0d0d",color:"#f87171",padding:"1px 7px",borderRadius:"10px",fontSize:"10px"}}>{o.status}</span></td></tr>))}</tbody></table>);
-      }
-      if (key==="open_complaints") {
-        if (!items.length) return <p style={{color:"#4ade80",textAlign:"center",padding:"16px"}}>✓ لا توجد شكاوى مفتوحة</p>;
-        return (<table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}><thead><tr style={{borderBottom:"1px solid #1e1e2e"}}>{["#","العميل","الموضوع","الحالة"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:"right",color:"#555",fontWeight:"500"}}>{h}</th>)}</tr></thead><tbody>{items.map((i: any)=>(<tr key={i.id} style={{borderBottom:"1px solid #141420"}}><td style={{padding:"6px 8px",color:"#c8b8ff",fontSize:"11px"}}>{i.id}</td><td style={{padding:"6px 8px"}}>{i.customer}</td><td style={{padding:"6px 8px",color:"#888"}}>{i.subject}</td><td style={{padding:"6px 8px"}}><span style={{background:"#1a1400",color:"#fbbf24",padding:"1px 7px",borderRadius:"10px",fontSize:"10px"}}>{i.status}</span></td></tr>))}</tbody></table>);
-      }
-      const cards: [string,string,string,string][] = [];
-      if (key==="avg_processing_days") { cards.push(["وقت المعالجة",`${raw?.value??"—"} يوم`,"الهدف: 1.5 يوم",raw?.value>1.5?"#E24B4A":"#1D9E75"],["العينة",String(raw?.sample??0),"طلب مسلّم","#888"]); }
-      if (key==="avg_response_hours") { cards.push(["متوسط وقت الرد",`${raw?.value??"—"}h`,"الهدف: 2h",raw?.value>2?"#E24B4A":"#1D9E75"],["حالات مغلقة",String(raw?.sample??0),"هذا الشهر","#888"]); }
-      if (key==="daily_sales") { cards.push(["المبيعات",`${(raw?.value??0).toLocaleString("ar-SA")} ر.س`,"الهدف: 20,000 ر.س",raw?.value>=20000?"#1D9E75":"#EF9F27"],["فواتير",String(raw?.orders_count??0),"اليوم","#888"]); }
-      if (key==="on_time_delivery") { cards.push(["في الوقت",`${raw?.pct??"—"}%`,"الهدف: 95%",(raw?.pct??0)>=95?"#1D9E75":"#EF9F27"],["التسليمات",String(raw?.count??0),"هذا الشهر","#888"]); }
-      return (<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"8px"}}>{cards.map(([l,v,s,c])=>(<div key={l} style={{background:"#0f0f1a",borderRadius:"8px",padding:"12px",textAlign:"center"}}><div style={{fontSize:"10px",color:"#666",marginBottom:"4px"}}>{l}</div><div style={{fontSize:"20px",fontWeight:"600",color:c,margin:"4px 0"}}>{v}</div><div style={{fontSize:"10px",color:"#555"}}>{s}</div></div>))}</div>);
+      const aiAnalysis = d ? generateAIAnalysis(k.rawKey, raw) : null;
+
+      return (
+        <div style={{animation:"fadeIn .2s ease"}}>
+
+          {/* AI Analysis Box */}
+          {aiAnalysis && (
+            <div style={{background:"linear-gradient(135deg,#0d1a2e,#0a1520)",border:"1px solid #1e3a5f",borderRadius:"12px",padding:"16px",marginBottom:"14px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px"}}>
+                <span style={{fontSize:"16px"}}>🤖</span>
+                <span style={{fontSize:"13px",fontWeight:"700",color:"#60a5fa"}}>تحليل AI</span>
+                <span style={{fontSize:"10px",color:"#555",marginRight:"auto",background:"#0a0a0f",padding:"2px 8px",borderRadius:"10px"}}>مبني على بيانات ERPNext</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+                <div>
+                  <div style={{fontSize:"10px",color:"#60a5fa",marginBottom:"6px",fontWeight:"600"}}>📊 الاستنتاجات</div>
+                  {aiAnalysis.insights.map((ins: string, i: number) => (
+                    <div key={i} style={{display:"flex",gap:"6px",marginBottom:"5px",alignItems:"flex-start"}}>
+                      <span style={{color:"#60a5fa",fontSize:"10px",marginTop:"2px"}}>◆</span>
+                      <span style={{fontSize:"11px",color:"#b0c4de",lineHeight:"1.5"}}>{ins}</span>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{fontSize:"10px",color:"#4ade80",marginBottom:"6px",fontWeight:"600"}}>💡 التوصيات</div>
+                  {aiAnalysis.recommendations.map((rec: string, i: number) => (
+                    <div key={i} style={{display:"flex",gap:"6px",marginBottom:"5px",alignItems:"flex-start"}}>
+                      <span style={{color:"#4ade80",fontSize:"10px",marginTop:"2px"}}>→</span>
+                      <span style={{fontSize:"11px",color:"#86efac",lineHeight:"1.5"}}>{rec}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Risk Score Bar */}
+              <div style={{marginTop:"12px",paddingTop:"12px",borderTop:"1px solid #1e3a5f"}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"10px",marginBottom:"4px"}}>
+                  <span style={{color:"#888"}}>مستوى الخطر</span>
+                  <span style={{color:aiAnalysis.score>70?"#f87171":aiAnalysis.score>40?"#fbbf24":"#4ade80",fontWeight:"600"}}>{aiAnalysis.score > 70 ? "🔴 حرج" : aiAnalysis.score > 40 ? "🟡 متوسط" : "🟢 منخفض"}</span>
+                </div>
+                <div style={{height:"4px",background:"#1a1a2e",borderRadius:"2px"}}>
+                  <div style={{width:`${aiAnalysis.score}%`,height:"100%",background:aiAnalysis.score>70?"#E24B4A":aiAnalysis.score>40?"#EF9F27":"#1D9E75",borderRadius:"2px",transition:"width .8s"}}></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Data Table */}
+          {items.length > 0 ? (
+            <div style={{background:"#0a0a0f",borderRadius:"10px",overflow:"hidden",marginBottom:"12px"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
+                <thead>
+                  <tr style={{background:"#111118"}}>
+                    {k.rawKey === "late_orders" && ["الطلب","العميل","أيام التأخير","المبلغ","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e",whiteSpace:"nowrap"}}>{h}</th>)}
+                    {k.rawKey === "stuck_orders" && ["الطلب","العميل","الحالة","التاريخ"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
+                    {["out_of_stock","low_stock"].includes(k.rawKey) && ["SKU","المستودع","الكمية"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
+                    {k.rawKey === "late_po" && ["PO","المورد","تاريخ الاستحقاق","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
+                    {k.rawKey === "open_complaints" && ["#","العميل","الموضوع","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.slice(0,15).map((item: any, i: number) => (
+                    <tr key={i} style={{borderBottom:"1px solid #141420",background:i%2===0?"transparent":"#0d0d14"}}>
+                      {k.rawKey === "late_orders" && <>
+                        <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
+                        <td style={{padding:"7px 10px",maxWidth:"140px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.customer}</td>
+                        <td style={{padding:"7px 10px"}}><span style={{background:item.days_late>30?"#1f0d0d":"#1a1400",color:item.days_late>30?"#f87171":"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.days_late} يوم</span></td>
+                        <td style={{padding:"7px 10px",color:"#fbbf24",fontSize:"11px"}}>{item.amount?`${Number(item.amount).toLocaleString()} ر.س`:"—"}</td>
+                        <td style={{padding:"7px 10px"}}><span style={{background:"#1f0d0d",color:"#f87171",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
+                      </>}
+                      {k.rawKey === "stuck_orders" && <>
+                        <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
+                        <td style={{padding:"7px 10px"}}>{item.customer}</td>
+                        <td style={{padding:"7px 10px"}}><span style={{background:"#1a1400",color:"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
+                        <td style={{padding:"7px 10px",color:"#888",fontSize:"11px"}}>{item.date}</td>
+                      </>}
+                      {["out_of_stock","low_stock"].includes(k.rawKey) && <>
+                        <td style={{padding:"7px 10px",color:"#c8b8ff"}}>{item.sku}</td>
+                        <td style={{padding:"7px 10px",color:"#888"}}>{item.warehouse}</td>
+                        <td style={{padding:"7px 10px"}}><span style={{background:k.rawKey==="out_of_stock"?"#1f0d0d":"#1a1400",color:k.rawKey==="out_of_stock"?"#f87171":"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.qty}</span></td>
+                      </>}
+                      {k.rawKey === "late_po" && <>
+                        <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
+                        <td style={{padding:"7px 10px"}}>{item.supplier}</td>
+                        <td style={{padding:"7px 10px",color:"#f87171"}}>{item.due}</td>
+                        <td style={{padding:"7px 10px"}}><span style={{background:"#1f0d0d",color:"#f87171",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
+                      </>}
+                      {k.rawKey === "open_complaints" && <>
+                        <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
+                        <td style={{padding:"7px 10px"}}>{item.customer}</td>
+                        <td style={{padding:"7px 10px",color:"#888",maxWidth:"180px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.subject}</td>
+                        <td style={{padding:"7px 10px"}}><span style={{background:"#1a1400",color:"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
+                      </>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {items.length > 15 && <div style={{padding:"8px 12px",fontSize:"11px",color:"#555",textAlign:"center"}}>+ {items.length - 15} سجل إضافي</div>}
+            </div>
+          ) : (
+            <div style={{textAlign:"center",padding:"20px",color:"#4ade80",fontSize:"13px"}}>✓ لا توجد بيانات تستدعي الانتباه</div>
+          )}
+
+          {/* Action Buttons */}
+          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+            <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"5px"}}>📋 إنشاء Tasks</button>
+            <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #25d366",borderRadius:"8px",color:"#25d366",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"5px"}}>💬 إرسال واتساب</button>
+            <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #4ade80",borderRadius:"8px",color:"#4ade80",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"5px"}}>📊 تصدير Excel</button>
+            <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #555",borderRadius:"8px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"5px"}}>🔗 فتح في ERPNext</button>
+          </div>
+        </div>
+      );
     };
 
     return (
       <div style={{fontFamily:"'Tajawal', sans-serif",direction:"rtl",minHeight:"100vh",background:"#0a0a0f",color:"#e8e8f0"}}>
         <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-        <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <style>{`
+          @keyframes fadeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+          @keyframes spin{to{transform:rotate(360deg)}}
+          @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+          .kpi-card:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,.4)!important;}
+          .kpi-card{transition:all .2s ease!important;}
+        `}</style>
         <div style={{display:"flex",minHeight:"100vh"}}>
           {sidebarJSX}
-          <div style={{flex:1,padding:"32px",overflowY:"auto"}}>
+          <div style={{flex:1,padding:"28px",overflowY:"auto"}}>
+
+            {/* Header */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"20px"}}>
               <div>
-                <h1 style={{fontSize:"22px",fontWeight:"800",margin:"0 0 4px"}}>لوحة KPIs 📊</h1>
+                <h1 style={{fontSize:"22px",fontWeight:"800",margin:"0 0 4px"}}>مركز القرار 📊</h1>
                 <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                  {erpLoading ? <span style={{fontSize:"12px",color:"#555",display:"flex",alignItems:"center",gap:"5px"}}><span style={{width:8,height:8,border:"2px solid #333",borderTopColor:"#c8b8ff",borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>جاري الجلب من ERPNext...</span>
-                  : erpError ? <span style={{fontSize:"12px",color:"#f87171"}}>⚠️ {erpError}</span>
-                  : d ? <span style={{fontSize:"12px",color:"#4ade80"}}>● ERPNext متصل · {lastFetched}</span>
-                  : <span style={{fontSize:"12px",color:"#555"}}>اضغط على أي مؤشر لرؤية التفاصيل</span>}
+                  {erpLoading
+                    ? <span style={{fontSize:"12px",color:"#555",display:"flex",alignItems:"center",gap:"5px"}}><span style={{width:8,height:8,border:"2px solid #333",borderTopColor:"#c8b8ff",borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>جاري الجلب من ERPNext...</span>
+                    : erpError ? <span style={{fontSize:"12px",color:"#f87171"}}>⚠️ {erpError}</span>
+                    : d ? <span style={{fontSize:"12px",color:"#4ade80",display:"flex",alignItems:"center",gap:"5px"}}><span style={{width:7,height:7,borderRadius:"50%",background:"#4ade80",animation:"pulse 2s infinite"}}/>ERPNext متصل · {lastFetched}</span>
+                    : null}
                 </div>
               </div>
               <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
                 {["اليوم","الأسبوع","الشهر","الربع","السنة"].map((p,i)=>(
                   <button key={p} onClick={()=>{ setTimePeriod(i); fetchKpis(i); }} style={{padding:"5px 11px",background:timePeriod===i?"#1a1a2e":"transparent",border:"1px solid "+(timePeriod===i?"#c8b8ff":"#2a2a3e"),borderRadius:"7px",color:timePeriod===i?"#c8b8ff":"#666",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
                 ))}
-                <button onClick={fetchKpis} disabled={erpLoading} style={{padding:"5px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"7px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>↻ تحديث</button>
+                <button onClick={()=>fetchKpis()} disabled={erpLoading} style={{padding:"5px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"7px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>↻ تحديث</button>
               </div>
             </div>
-            {erpError && <div style={{background:"#1a0a0a",border:"1px solid #3a1a1a",borderRadius:"10px",padding:"12px 16px",marginBottom:"16px",display:"flex",alignItems:"center",gap:"10px"}}><span style={{color:"#f87171",fontSize:"13px"}}>⚠️ تعذّر الاتصال بـ ERPNext</span><button onClick={fetchKpis} style={{marginRight:"auto",padding:"4px 12px",background:"#2a1a1a",border:"1px solid #5a2a2a",borderRadius:"6px",color:"#f87171",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"}}>إعادة المحاولة</button></div>}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"10px"}}>
-              {kpis.slice(0,5).map((k,i)=>(
-                <div key={i} onClick={()=>setActiveKpi(activeKpi===i?null:i)} style={{background:"#111118",border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`,borderTop:`3px solid ${k.color}`,borderRadius:"12px",padding:"14px",cursor:"pointer",position:"relative",transition:"all .15s"}}>
-                  <div style={{width:"7px",height:"7px",borderRadius:"50%",background:k.color,position:"absolute",top:"10px",left:"10px"}}></div>
-                  <div style={{fontSize:"11px",color:"#666",marginBottom:"5px"}}>{k.n}</div>
-                  <div style={{fontSize:"22px",fontWeight:"700",color:k.color,marginBottom:"3px"}}>{erpLoading?<span style={{width:10,height:10,border:"2px solid #333",borderTopColor:k.color,borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>:k.val}</div>
-                  <div style={{fontSize:"10px",color:"#555"}}>{k.target}{k.trend&&<span style={{color:k.color}}> {k.trend}</span>}</div>
-                  <div style={{height:"3px",background:"#1a1a2e",borderRadius:"2px",marginTop:"8px"}}><div style={{width:`${k.pct}%`,height:"100%",background:k.color,borderRadius:"2px",transition:"width .5s"}}></div></div>
+
+            {/* Priority Score Board */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"10px",marginBottom:"20px"}}>
+              {[
+                {label:"🔥 حرج", items:critical, bg:"#1f0d0d", border:"#3a1a1a", color:"#f87171"},
+                {label:"⚠️ تحذير", items:medium, bg:"#1a1400", border:"#3a2800", color:"#fbbf24"},
+                {label:"✅ جيد", items:low, bg:"#0d1f0d", border:"#1a3a1a", color:"#4ade80"},
+              ].map(group=>(
+                <div key={group.label} style={{background:group.bg,border:`1px solid ${group.border}`,borderRadius:"12px",padding:"14px"}}>
+                  <div style={{fontSize:"13px",fontWeight:"700",color:group.color,marginBottom:"8px"}}>{group.label} ({group.items.length})</div>
+                  {group.items.length === 0
+                    ? <div style={{fontSize:"11px",color:"#555"}}>لا توجد مشاكل</div>
+                    : group.items.map((k,i)=>(
+                      <div key={i} onClick={()=>setActiveKpi(kpis.indexOf(k))} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<group.items.length-1?"1px solid "+group.border:"none",cursor:"pointer"}}>
+                        <span style={{fontSize:"11px",color:"#e8e8f0"}}>{k.icon} {k.n}</span>
+                        <span style={{fontSize:"12px",fontWeight:"700",color:group.color}}>{k.val} {k.unit}</span>
+                      </div>
+                    ))
+                  }
                 </div>
               ))}
             </div>
-            {activeKpi!==null&&activeKpi<5&&(<div style={{background:"#111118",border:"1px solid #378ADD",borderRadius:"14px",padding:"20px",marginBottom:"10px",animation:"fadeIn .2s ease"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}><span style={{fontSize:"14px",fontWeight:"700"}}>{kpis[activeKpi].n} — تفاصيل</span><button onClick={()=>setActiveKpi(null)} style={{padding:"4px 10px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"6px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>✕ إغلاق</button></div>{renderDetail(activeKpi)}</div>)}
+
+            {/* KPI Cards Grid */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"10px"}}>
+              {kpis.slice(0,5).map((k,i)=>(
+                <div key={i} className="kpi-card" onClick={()=>setActiveKpi(activeKpi===i?null:i)}
+                  style={{background:"#111118",border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`,borderTop:`3px solid ${k.color}`,borderRadius:"12px",padding:"14px",cursor:"pointer",position:"relative",boxShadow:activeKpi===i?"0 0 0 2px rgba(55,138,221,0.2)":"none"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"4px"}}>
+                    <span style={{fontSize:"16px"}}>{k.icon}</span>
+                    <span style={{fontSize:"9px",background:k.priority==="critical"?"#1f0d0d":k.priority==="medium"?"#1a1400":"#0d1f0d",color:k.priority==="critical"?"#f87171":k.priority==="medium"?"#fbbf24":"#4ade80",padding:"1px 6px",borderRadius:"8px"}}>
+                      {k.priority==="critical"?"حرج":k.priority==="medium"?"تحذير":"جيد"}
+                    </span>
+                  </div>
+                  <div style={{fontSize:"10px",color:"#666",marginBottom:"3px"}}>{k.n}</div>
+                  <div style={{fontSize:"22px",fontWeight:"700",color:k.color,marginBottom:"1px"}}>
+                    {erpLoading?<span style={{width:10,height:10,border:"2px solid #333",borderTopColor:k.color,borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>:k.val}
+                  </div>
+                  <div style={{fontSize:"10px",color:"#555"}}>الهدف: {k.target} {k.unit}</div>
+                  <div style={{height:"3px",background:"#1a1a2e",borderRadius:"2px",marginTop:"8px"}}><div style={{width:`${k.pct}%`,height:"100%",background:k.color,borderRadius:"2px",transition:"width .6s"}}></div></div>
+                  {activeKpi===i && <div style={{position:"absolute",bottom:"-1px",left:"50%",transform:"translateX(-50%)",width:0,height:0,borderLeft:"6px solid transparent",borderRight:"6px solid transparent",borderTop:"6px solid #378ADD"}}></div>}
+                </div>
+              ))}
+            </div>
+
+            {/* Drill-down Panel Row 1 */}
+            {activeKpi!==null&&activeKpi<5&&(
+              <div style={{background:"#111118",border:"1px solid #378ADD",borderRadius:"14px",padding:"20px",marginBottom:"10px",animation:"fadeIn .2s ease"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                    <span style={{fontSize:"20px"}}>{kpis[activeKpi].icon}</span>
+                    <div>
+                      <div style={{fontSize:"15px",fontWeight:"800"}}>{kpis[activeKpi].n}</div>
+                      <div style={{fontSize:"12px",color:"#555"}}>تحليل تفصيلي · {kpis[activeKpi].val} {kpis[activeKpi].unit}</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>setActiveKpi(null)} style={{padding:"4px 12px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"6px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>✕ إغلاق</button>
+                </div>
+                {renderDrillDown(activeKpi)}
+              </div>
+            )}
+
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"10px"}}>
               {kpis.slice(5).map((k,ii)=>{const i=ii+5;return(
-                <div key={i} onClick={()=>setActiveKpi(activeKpi===i?null:i)} style={{background:"#111118",border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`,borderTop:`3px solid ${k.color}`,borderRadius:"12px",padding:"14px",cursor:"pointer",position:"relative",transition:"all .15s"}}>
-                  <div style={{width:"7px",height:"7px",borderRadius:"50%",background:k.color,position:"absolute",top:"10px",left:"10px"}}></div>
-                  <div style={{fontSize:"11px",color:"#666",marginBottom:"5px"}}>{k.n}</div>
-                  <div style={{fontSize:"22px",fontWeight:"700",color:k.color,marginBottom:"3px"}}>{erpLoading?<span style={{width:10,height:10,border:"2px solid #333",borderTopColor:k.color,borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>:k.val}</div>
-                  <div style={{fontSize:"10px",color:"#555"}}>{k.target}{k.trend&&<span style={{color:k.color}}> {k.trend}</span>}</div>
-                  <div style={{height:"3px",background:"#1a1a2e",borderRadius:"2px",marginTop:"8px"}}><div style={{width:`${k.pct}%`,height:"100%",background:k.color,borderRadius:"2px",transition:"width .5s"}}></div></div>
+                <div key={i} className="kpi-card" onClick={()=>setActiveKpi(activeKpi===i?null:i)}
+                  style={{background:"#111118",border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`,borderTop:`3px solid ${k.color}`,borderRadius:"12px",padding:"14px",cursor:"pointer",position:"relative",boxShadow:activeKpi===i?"0 0 0 2px rgba(55,138,221,0.2)":"none"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"4px"}}>
+                    <span style={{fontSize:"16px"}}>{k.icon}</span>
+                    <span style={{fontSize:"9px",background:k.priority==="critical"?"#1f0d0d":k.priority==="medium"?"#1a1400":"#0d1f0d",color:k.priority==="critical"?"#f87171":k.priority==="medium"?"#fbbf24":"#4ade80",padding:"1px 6px",borderRadius:"8px"}}>
+                      {k.priority==="critical"?"حرج":k.priority==="medium"?"تحذير":"جيد"}
+                    </span>
+                  </div>
+                  <div style={{fontSize:"10px",color:"#666",marginBottom:"3px"}}>{k.n}</div>
+                  <div style={{fontSize:"22px",fontWeight:"700",color:k.color,marginBottom:"1px"}}>
+                    {erpLoading?<span style={{width:10,height:10,border:"2px solid #333",borderTopColor:k.color,borderRadius:"50%",display:"inline-block",animation:"spin 0.8s linear infinite"}}/>:k.val}
+                  </div>
+                  <div style={{fontSize:"10px",color:"#555"}}>الهدف: {k.target} {k.unit}</div>
+                  <div style={{height:"3px",background:"#1a1a2e",borderRadius:"2px",marginTop:"8px"}}><div style={{width:`${k.pct}%`,height:"100%",background:k.color,borderRadius:"2px",transition:"width .6s"}}></div></div>
+                  {activeKpi===i && <div style={{position:"absolute",bottom:"-1px",left:"50%",transform:"translateX(-50%)",width:0,height:0,borderLeft:"6px solid transparent",borderRight:"6px solid transparent",borderTop:"6px solid #378ADD"}}></div>}
                 </div>
               );})}
             </div>
-            {activeKpi!==null&&activeKpi>=5&&(<div style={{background:"#111118",border:"1px solid #378ADD",borderRadius:"14px",padding:"20px",marginBottom:"10px",animation:"fadeIn .2s ease"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}><span style={{fontSize:"14px",fontWeight:"700"}}>{kpis[activeKpi].n} — تفاصيل</span><button onClick={()=>setActiveKpi(null)} style={{padding:"4px 10px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"6px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>✕ إغلاق</button></div>{renderDetail(activeKpi)}</div>)}
-            <div style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:"14px",overflow:"hidden"}}>
-              <div style={{padding:"14px 20px",borderBottom:"1px solid #1e1e2e",fontSize:"13px",fontWeight:"600",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span>ملخص تنفيذي — حالة جميع KPIs</span>{d&&<span style={{fontSize:"11px",color:"#555"}}>مصدر: ERPNext · {lastFetched}</span>}</div>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
-                <thead><tr style={{background:"#0a0a0f"}}>{["#","المؤشر","القيمة","الهدف","الاتجاه","الحالة"].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"right",color:"#555",fontWeight:"500",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}</tr></thead>
-                <tbody>{kpis.map((k,i)=>(<tr key={i} style={{borderBottom:"1px solid #141420",cursor:"pointer"}} onClick={()=>setActiveKpi(activeKpi===i?null:i)}><td style={{padding:"8px 12px",color:"#555"}}>{i+1}</td><td style={{padding:"8px 12px"}}>{k.n.replace(/^[①-⑩] /,"")}</td><td style={{padding:"8px 12px",fontWeight:"600",color:k.color}}>{k.val}</td><td style={{padding:"8px 12px",color:"#888"}}>{k.target}</td><td style={{padding:"8px 12px",color:k.color}}>{k.trend||"—"}</td><td style={{padding:"8px 12px"}}><span style={{background:k.color==="#1D9E75"?"#0d1f0d":k.color==="#E24B4A"?"#1f0d0d":"#1a1400",color:k.color,padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{k.color==="#1D9E75"?"✓ جيد":k.color==="#E24B4A"?"⚠ حرج":"~ تحذير"}</span></td></tr>))}</tbody>
-              </table>
-              <div style={{padding:"12px 16px",display:"flex",gap:"8px"}}>
-                <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>تصدير Excel ↗</button>
-                <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>إرسال واتساب ↗</button>
+
+            {/* Drill-down Panel Row 2 */}
+            {activeKpi!==null&&activeKpi>=5&&(
+              <div style={{background:"#111118",border:"1px solid #378ADD",borderRadius:"14px",padding:"20px",marginBottom:"10px",animation:"fadeIn .2s ease"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                    <span style={{fontSize:"20px"}}>{kpis[activeKpi].icon}</span>
+                    <div>
+                      <div style={{fontSize:"15px",fontWeight:"800"}}>{kpis[activeKpi].n}</div>
+                      <div style={{fontSize:"12px",color:"#555"}}>تحليل تفصيلي · {kpis[activeKpi].val} {kpis[activeKpi].unit}</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>setActiveKpi(null)} style={{padding:"4px 12px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"6px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>✕ إغلاق</button>
+                </div>
+                {renderDrillDown(activeKpi)}
               </div>
+            )}
+
+            {/* Executive Summary */}
+            <div style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:"14px",overflow:"hidden"}}>
+              <div style={{padding:"14px 20px",borderBottom:"1px solid #1e1e2e",fontSize:"13px",fontWeight:"700",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <span>ملخص تنفيذي</span>
+                {d&&<span style={{fontSize:"11px",color:"#555",fontWeight:"400"}}>ERPNext · {lastFetched}</span>}
+              </div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
+                <thead><tr style={{background:"#0a0a0f"}}>{["#","المؤشر","القيمة","الهدف","الأولوية","إجراء"].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"right",color:"#555",fontWeight:"500",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {kpis.map((k,i)=>(
+                    <tr key={i} style={{borderBottom:"1px solid #141420",cursor:"pointer"}} onClick={()=>setActiveKpi(activeKpi===i?null:i)}>
+                      <td style={{padding:"8px 12px",color:"#555"}}>{i+1}</td>
+                      <td style={{padding:"8px 12px"}}>{k.icon} {k.n}</td>
+                      <td style={{padding:"8px 12px",fontWeight:"700",color:k.color}}>{k.val} {k.unit}</td>
+                      <td style={{padding:"8px 12px",color:"#888"}}>{k.target} {k.unit}</td>
+                      <td style={{padding:"8px 12px"}}>
+                        <span style={{background:k.priority==="critical"?"#1f0d0d":k.priority==="medium"?"#1a1400":"#0d1f0d",color:k.priority==="critical"?"#f87171":k.priority==="medium"?"#fbbf24":"#4ade80",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>
+                          {k.priority==="critical"?"🔥 حرج":k.priority==="medium"?"⚠️ تحذير":"✅ جيد"}
+                        </span>
+                      </td>
+                      <td style={{padding:"8px 12px"}}><button onClick={(e)=>{e.stopPropagation();setActiveKpi(i);}} style={{padding:"2px 10px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"6px",color:"#c8b8ff",fontSize:"10px",cursor:"pointer",fontFamily:"inherit"}}>تفاصيل ↓</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+
           </div>
         </div>
       </div>

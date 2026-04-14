@@ -521,70 +521,48 @@ export default function Home() {
   // REPORTS / KPI DASHBOARD VIEW
   // ══════════════════════════════════════
   if (view === "reports") {
-    const d = erpData;
+    const d = erpData as any;
+    const sc = (s) => s === "critical" ? "#E24B4A" : s === "warning" ? "#EF9F27" : "#1D9E75";
+    const sb = (s) => s === "critical" ? "#1f0d0d" : s === "warning" ? "#1a1400" : "#0d1f0d";
+    const sl = (s) => s === "critical" ? "حرج" : s === "warning" ? "تحذير" : "جيد";
+    const sev = (n, t1, t2) => !d ? "good" : n > t1 ? "critical" : n > t2 ? "warning" : "good";
 
-    const kpiDefs = [
-      { id:"late", n:"الطلبات المتأخرة", val: d ? String(d.late_orders?.count ?? "—") : "—", unit:"طلب", target:"الهدف: أقل من 10", severity: d ? (d.late_orders?.count > 10 ? "critical" : d.late_orders?.count > 0 ? "warning" : "good") : "good", pct: d ? Math.min(100,(d.late_orders?.count??0)*2) : 0, rawKey:"late_orders",
-        insights: d?.late_orders?.items?.length > 0 ? [`${d.late_orders.count} طلب تجاوز تاريخ التسليم`,`متوسط التأخير ${Math.round(d.late_orders.items.reduce((s:number,o:any)=>s+(o.days_late||0),0)/Math.max(d.late_orders.items.length,1))} يوم`,d.late_orders.items.filter((o:any)=>(o.days_late||0)>30).length > 0 ? `${d.late_orders.items.filter((o:any)=>(o.days_late||0)>30).length} طلب متأخر أكثر من 30 يوم` : "لا توجد طلبات متأخرة أكثر من 30 يوم"] : ["لا توجد طلبات متأخرة حالياً ✓"],
-        recs: ["تواصل مع العملاء المتأثرين فوراً","راجع سياسة التسليم مع فريق اللوجستيات","فعّل تنبيهات يومية للطلبات المتأخرة"] },
-      { id:"stuck", n:"الطلبات العالقة", val: d ? String(d.stuck_orders?.count ?? "—") : "—", unit:"طلب", target:"الهدف: أقل من 5", severity: d ? (d.stuck_orders?.count > 8 ? "critical" : d.stuck_orders?.count > 3 ? "warning" : "good") : "good", pct: d ? Math.min(100,(d.stuck_orders?.count??0)*8) : 0, rawKey:"stuck_orders",
-        insights: [`${d?.stuck_orders?.count??0} طلب بانتظار مورد أو تحديث شحن`,"راجع حالة كل طلب يدوياً","بعض الطلبات قد تكون عالقة منذ أسبوع"],
-        recs: ["راجع حالة الشحن لكل طلب","تواصل مع موردي القنوات المتأثرة","أنشئ تقرير عالق أسبوعي تلقائي"] },
-      { id:"processing", n:"وقت المعالجة", val: d ? `${d.avg_processing_days?.value??"—"}` : "—", unit:"يوم", target:"الهدف: 1.5 يوم", severity: d ? (d.avg_processing_days?.value > 3 ? "critical" : d.avg_processing_days?.value > 1.5 ? "warning" : "good") : "good", pct: d ? Math.min(100,((d.avg_processing_days?.value??0)/3)*100) : 0, rawKey:"avg_processing_days",
-        insights: [`متوسط ${d?.avg_processing_days?.value??0} يوم لكل طلب`,d?.avg_processing_days?.value <= 1.5 ? "الأداء ضمن الهدف ✓" : "تجاوز الهدف — يحتاج مراجعة",`مبني على ${d?.avg_processing_days?.sample??0} طلب هذا الشهر`],
-        recs: ["راجع مراحل التأخير في كل طلب","سرّع عمليات إصدار البوليصة","تتبع الأداء أسبوعياً"] },
-      { id:"oos", n:"المنتجات النافدة", val: d ? String(d.out_of_stock?.count??"—") : "—", unit:"SKU", target:"الهدف: صفر", severity: d ? (d.out_of_stock?.count > 5 ? "critical" : d.out_of_stock?.count > 0 ? "warning" : "good") : "good", pct: d ? Math.min(100,(d.out_of_stock?.count??0)*5) : 0, rawKey:"out_of_stock",
-        insights: [`${d?.out_of_stock?.count??0} منتج نفد من المخزون`,"يؤثر مباشرة على تنفيذ الطلبات","يستدعي أوامر شراء فورية"],
-        recs: ["أنشئ أوامر شراء فورية","أعلم فريق المبيعات بالمنتجات غير المتوفرة","فعّل تنبيه نفاد المخزون في ERPNext"] },
-      { id:"low", n:"قريبة من النفاد", val: d ? String(d.low_stock?.count??"—") : "—", unit:"SKU", target:"الهدف: أقل من 15", severity: d ? (d.low_stock?.count > 20 ? "critical" : d.low_stock?.count > 0 ? "warning" : "good") : "good", pct: d ? Math.min(100,(d.low_stock?.count??0)*3) : 0, rawKey:"low_stock",
-        insights: [`${d?.low_stock?.count??0} SKU أقل من حد إعادة الطلب`,"إذا لم يُتخذ إجراء ستنفد خلال أيام","الأولوية: الأعلى مبيعاً أولاً"],
-        recs: ["ابدأ أوامر الشراء للـ SKUs المنخفضة","رتّب حسب الأولوية: الأعلى مبيعاً","اتفق مع الموردين على تسريع التوريد"] },
-      { id:"po", n:"تأخر الموردين", val: d ? String(d.late_po?.count??"—") : "—", unit:"PO", target:"الهدف: صفر", severity: d ? (d.late_po?.count > 5 ? "critical" : d.late_po?.count > 0 ? "warning" : "good") : "good", pct: d ? Math.min(100,(d.late_po?.count??0)*6) : 0, rawKey:"late_po",
-        insights: [`${d?.late_po?.count??0} أوامر شراء متأخرة عن موعدها`,"يؤثر مباشرة على تنفيذ طلبات العملاء","راجع أسباب التأخير مع كل مورد"],
-        recs: ["اتصل بالموردين المتأخرين اليوم","فعّل غرامات التأخير حسب العقد","ابحث عن موردين بديلين للمنتجات الحرجة"] },
-      { id:"complaints", n:"الشكاوى المفتوحة", val: d ? String(d.open_complaints?.count??"—") : "—", unit:"شكوى", target:"الهدف: صفر", severity: d ? (d.open_complaints?.count > 5 ? "critical" : d.open_complaints?.count > 0 ? "warning" : "good") : "good", pct: d ? Math.min(100,(d.open_complaints?.count??0)*10) : 0, rawKey:"open_complaints",
-        insights: [`${d?.open_complaints?.count??0} شكوى مفتوحة`,`${d?.open_complaints?.no_reply_24h??0} شكوى بدون رد منذ 24 ساعة`,"يؤثر على تقييم رضا العملاء"],
-        recs: ["ردّ على الشكاوى غير المجابة فوراً","أضف قالب ردود سريعة","تتبع أسباب الشكاوى لمنعها مستقبلاً"] },
-      { id:"response", n:"وقت الرد", val: d ? `${d.avg_response_hours?.value??"—"}` : "—", unit:"ساعة", target:"الهدف: 2 ساعة", severity: d ? (d.avg_response_hours?.value > 6 ? "critical" : d.avg_response_hours?.value > 2 ? "warning" : "good") : "good", pct: d ? Math.min(100,((d.avg_response_hours?.value??0)/8)*100) : 0, rawKey:"avg_response_hours",
-        insights: [`متوسط ${d?.avg_response_hours?.value??0} ساعة للرد`,d?.avg_response_hours?.value <= 2 ? "أفضل من الهدف ✓" : "تجاوز الهدف — يحتاج مراجعة",`مبني على ${d?.avg_response_hours?.sample??0} حالة مغلقة`],
-        recs: ["حافظ على معدل الرد الجيد","وثّق أفضل الممارسات وشاركها","استمر في مراقبة المعدل يومياً"] },
-      { id:"sales", n:"المبيعات", val: d ? `${(d.daily_sales?.value??0).toLocaleString("ar-SA")}` : "—", unit:"ر.س", target:`الهدف: 20,000 ر.س · ${d?.daily_sales?.period??""}`, severity: d ? (d.daily_sales?.value >= 20000 ? "good" : d.daily_sales?.value >= 10000 ? "warning" : "critical") : "good", pct: d ? Math.min(100,((d.daily_sales?.value??0)/20000)*100) : 0, rawKey:"daily_sales",
-        insights: [`${(d?.daily_sales?.value??0).toLocaleString("ar-SA")} ر.س — ${d?.daily_sales?.period??""}`,d?.daily_sales?.value >= 20000 ? "تجاوز الهدف ✓" : "لم يصل للهدف بعد",`${d?.daily_sales?.orders_count??0} فاتورة`],
-        recs: ["تابع أداء المبيعات يومياً","راجع القنوات الأقل أداءً","فعّل حملات ترويجية للمنتجات الراكدة"] },
-      { id:"delivery", n:"التوصيل في الوقت", val: d ? `${d.on_time_delivery?.pct??"—"}` : "—", unit:"%", target:"الهدف: 95%", severity: d ? ((d.on_time_delivery?.pct??0) >= 95 ? "good" : (d.on_time_delivery?.pct??0) >= 80 ? "warning" : "critical") : "good", pct: d?.on_time_delivery?.pct??0, rawKey:"on_time_delivery",
-        insights: [`${d?.on_time_delivery?.pct??0}% من الطلبات تُسلّم في الوقت`,`${d?.on_time_delivery?.count??0} تسليم هذا الشهر`,d?.on_time_delivery?.pct >= 95 ? "ضمن الهدف ✓" : "دون الهدف — يحتاج مراجعة"],
-        recs: ["تحليل أسباب التأخير في التسليم","تحسين التنسيق مع شركات الشحن","فعّل تتبع التسليم في الوقت الفعلي"] },
+    const kpis = [
+      { n:"الطلبات المتأخرة", icon:"🚨", val: d ? String(d.late_orders?.count ?? "—") : "—", unit:"طلب", target:"الهدف: أقل من 10", key:"late_orders", sev: sev(d?.late_orders?.count||0, 10, 0), pct: Math.min(100,(d?.late_orders?.count||0)*2), insights:[`${d?.late_orders?.count||0} طلب تجاوز تاريخ التسليم`,`متوسط التأخير ${d?.late_orders?.items?.length>0?Math.round(d.late_orders.items.reduce((s,o)=>s+(o.days_late||0),0)/d.late_orders.items.length):0} يوم`,"تحتاج تدخل فوري"], recs:["تواصل مع العملاء المتأثرين فوراً","راجع سياسة التسليم","فعّل تنبيهات يومية"] },
+      { n:"الطلبات العالقة", icon:"⏸", val: d ? String(d.stuck_orders?.count ?? "—") : "—", unit:"طلب", target:"الهدف: أقل من 5", key:"stuck_orders", sev: sev(d?.stuck_orders?.count||0, 8, 3), pct: Math.min(100,(d?.stuck_orders?.count||0)*8), insights:[`${d?.stuck_orders?.count||0} طلب بانتظار مورد أو شحن`,"راجع حالة كل طلب يدوياً"], recs:["راجع حالة الشحن لكل طلب","أنشئ تقرير أسبوعي تلقائي"] },
+      { n:"وقت المعالجة", icon:"⏱", val: d ? `${d.avg_processing_days?.value??"—"}` : "—", unit:"يوم", target:"الهدف: 1.5 يوم", key:"avg_processing_days", sev: !d?"good":d.avg_processing_days?.value>3?"critical":d.avg_processing_days?.value>1.5?"warning":"good", pct: Math.min(100,((d?.avg_processing_days?.value||0)/3)*100), insights:[`متوسط ${d?.avg_processing_days?.value||0} يوم`,`مبني على ${d?.avg_processing_days?.sample||0} طلب`], recs:["راجع مراحل التأخير","سرّع إصدار البوليصة"] },
+      { n:"المنتجات النافدة", icon:"📦", val: d ? String(d.out_of_stock?.count??"—") : "—", unit:"SKU", target:"الهدف: صفر", key:"out_of_stock", sev: sev(d?.out_of_stock?.count||0, 5, 0), pct: Math.min(100,(d?.out_of_stock?.count||0)*5), insights:[`${d?.out_of_stock?.count||0} منتج نفد من المخزون`,"يؤثر على تنفيذ الطلبات"], recs:["أنشئ أوامر شراء فورية","أعلم فريق المبيعات"] },
+      { n:"قريبة من النفاد", icon:"⚠️", val: d ? String(d.low_stock?.count??"—") : "—", unit:"SKU", target:"الهدف: أقل من 15", key:"low_stock", sev: sev(d?.low_stock?.count||0, 20, 0), pct: Math.min(100,(d?.low_stock?.count||0)*3), insights:[`${d?.low_stock?.count||0} SKU أقل من حد إعادة الطلب`,"ستنفد خلال أيام"], recs:["ابدأ أوامر الشراء فوراً","رتّب حسب الأولوية"] },
+      { n:"تأخر الموردين", icon:"🏭", val: d ? String(d.late_po?.count??"—") : "—", unit:"PO", target:"الهدف: صفر", key:"late_po", sev: sev(d?.late_po?.count||0, 5, 0), pct: Math.min(100,(d?.late_po?.count||0)*6), insights:[`${d?.late_po?.count||0} أوامر شراء متأخرة`,"يؤثر على تنفيذ طلبات العملاء"], recs:["اتصل بالموردين اليوم","فعّل غرامات التأخير"] },
+      { n:"الشكاوى المفتوحة", icon:"💬", val: d ? String(d.open_complaints?.count??"—") : "—", unit:"شكوى", target:"الهدف: صفر", key:"open_complaints", sev: sev(d?.open_complaints?.count||0, 5, 0), pct: Math.min(100,(d?.open_complaints?.count||0)*10), insights:[`${d?.open_complaints?.count||0} شكوى مفتوحة`,`${d?.open_complaints?.no_reply_24h||0} بدون رد منذ 24 ساعة`], recs:["ردّ على الشكاوى غير المجابة فوراً","أضف قوالب ردود سريعة"] },
+      { n:"وقت الرد", icon:"📞", val: d ? `${d.avg_response_hours?.value??"—"}` : "—", unit:"ساعة", target:"الهدف: 2 ساعة", key:"avg_response_hours", sev: !d?"good":d.avg_response_hours?.value>6?"critical":d.avg_response_hours?.value>2?"warning":"good", pct: Math.min(100,((d?.avg_response_hours?.value||0)/8)*100), insights:[`متوسط ${d?.avg_response_hours?.value||0} ساعة للرد`,d?.avg_response_hours?.value<=2?"أفضل من الهدف ✓":"تجاوز الهدف"], recs:["حافظ على معدل الرد الجيد","وثّق أفضل الممارسات"] },
+      { n:"المبيعات", icon:"💰", val: d ? `${(d.daily_sales?.value||0).toLocaleString("ar-SA")}` : "—", unit:"ر.س", target:`الهدف: 20,000 · ${d?.daily_sales?.period||""}`, key:"daily_sales", sev: !d?"good":d.daily_sales?.value>=20000?"good":d.daily_sales?.value>=10000?"warning":"critical", pct: Math.min(100,((d?.daily_sales?.value||0)/20000)*100), insights:[`${(d?.daily_sales?.value||0).toLocaleString("ar-SA")} ر.س`,`${d?.daily_sales?.orders_count||0} فاتورة`], recs:["تابع أداء المبيعات يومياً","راجع القنوات الأقل أداءً"] },
+      { n:"التوصيل في الوقت", icon:"🚚", val: d ? `${d.on_time_delivery?.pct??"—"}` : "—", unit:"%", target:"الهدف: 95%", key:"on_time_delivery", sev: !d?"good":(d.on_time_delivery?.pct||0)>=95?"good":(d.on_time_delivery?.pct||0)>=80?"warning":"critical", pct: d?.on_time_delivery?.pct||0, insights:[`${d?.on_time_delivery?.pct||0}% من الطلبات تُسلّم في الوقت`,`${d?.on_time_delivery?.count||0} تسليم`], recs:["تحليل أسباب التأخير","تحسين التنسيق مع شركات الشحن"] },
     ];
 
-    const sevColor = (s: string) => s === "critical" ? "#E24B4A" : s === "warning" ? "#EF9F27" : "#1D9E75";
-    const sevBg = (s: string) => s === "critical" ? "#1f0d0d" : s === "warning" ? "#1a1400" : "#0d1f0d";
-    const sevLabel = (s: string) => s === "critical" ? "حرج" : s === "warning" ? "تحذير" : "جيد";
+    const critical = kpis.filter(k=>k.sev==="critical").length;
+    const warning = kpis.filter(k=>k.sev==="warning").length;
+    const good = kpis.filter(k=>k.sev==="good").length;
 
-    const critical = kpiDefs.filter(k=>k.severity==="critical").length;
-    const warning = kpiDefs.filter(k=>k.severity==="warning").length;
-    const good = kpiDefs.filter(k=>k.severity==="good").length;
-
-    const renderDrill = (idx: number) => {
-      const k = kpiDefs[idx];
-      const raw = d?.[k.rawKey];
-      const items = raw?.items ?? [];
+    const DrillPanel = ({idx}) => {
+      const k = kpis[idx];
+      const raw = d?.[k.key];
+      const items = raw?.items || [];
       return (
         <div style={{background:"#0d0d14",border:"1px solid #378ADD",borderRadius:"14px",padding:"18px",marginBottom:"10px",animation:"fadeIn .2s ease"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
             <div>
-              <div style={{fontSize:"15px",fontWeight:"700"}}>{k.n} — تحليل تفصيلي</div>
-              <div style={{fontSize:"12px",color:"#555",marginTop:"2px"}}>{k.val} {k.unit} · مصدر: ERPNext</div>
+              <div style={{fontSize:"15px",fontWeight:"700"}}>{k.icon} {k.n} — تفاصيل</div>
+              <div style={{fontSize:"11px",color:"#555",marginTop:"2px"}}>{k.val} {k.unit} · ERPNext</div>
             </div>
             <button onClick={()=>setActiveKpi(null)} style={{padding:"4px 12px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"6px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>✕ إغلاق</button>
           </div>
-
-          {/* AI Analysis */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}}>
             <div style={{background:"#0a1520",border:"1px solid #1e3a5f",borderRadius:"10px",padding:"12px"}}>
-              <div style={{fontSize:"11px",fontWeight:"700",color:"#60a5fa",marginBottom:"8px"}}>📊 تحليل AI</div>
+              <div style={{fontSize:"11px",fontWeight:"700",color:"#60a5fa",marginBottom:"8px"}}>📊 تحليل</div>
               {k.insights.map((ins,i)=>(
-                <div key={i} style={{display:"flex",gap:"6px",marginBottom:"5px",alignItems:"flex-start"}}>
-                  <span style={{color:"#60a5fa",fontSize:"10px",marginTop:"2px",flexShrink:0}}>◆</span>
+                <div key={i} style={{display:"flex",gap:"6px",marginBottom:"5px"}}>
+                  <span style={{color:"#60a5fa",fontSize:"10px",flexShrink:0}}>◆</span>
                   <span style={{fontSize:"12px",color:"#b0c4de",lineHeight:"1.6"}}>{ins}</span>
                 </div>
               ))}
@@ -592,55 +570,50 @@ export default function Home() {
             <div style={{background:"#0a1a0f",border:"1px solid #1a3a1a",borderRadius:"10px",padding:"12px"}}>
               <div style={{fontSize:"11px",fontWeight:"700",color:"#4ade80",marginBottom:"8px"}}>💡 التوصيات</div>
               {k.recs.map((rec,i)=>(
-                <div key={i} style={{display:"flex",gap:"6px",marginBottom:"5px",alignItems:"flex-start"}}>
-                  <span style={{color:"#4ade80",fontSize:"10px",marginTop:"2px",flexShrink:0}}>→</span>
+                <div key={i} style={{display:"flex",gap:"6px",marginBottom:"5px"}}>
+                  <span style={{color:"#4ade80",fontSize:"10px",flexShrink:0}}>→</span>
                   <span style={{fontSize:"12px",color:"#86efac",lineHeight:"1.6"}}>{rec}</span>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Data Table */}
           {items.length > 0 && (
             <div style={{background:"#0a0a0f",borderRadius:"10px",overflow:"hidden",marginBottom:"12px"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
-                <thead>
-                  <tr style={{background:"#111118"}}>
-                    {k.rawKey==="late_orders" && ["الطلب","العميل","أيام التأخير","المبلغ","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                    {k.rawKey==="stuck_orders" && ["الطلب","العميل","الحالة","التاريخ"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                    {["out_of_stock","low_stock"].includes(k.rawKey) && ["SKU","المستودع","الكمية"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                    {k.rawKey==="late_po" && ["PO","المورد","الاستحقاق","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                    {k.rawKey==="open_complaints" && ["#","العميل","الموضوع","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                  </tr>
-                </thead>
+                <thead><tr style={{background:"#111118"}}>
+                  {k.key==="late_orders" && ["الطلب","العميل","أيام التأخير","المبلغ"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
+                  {k.key==="stuck_orders" && ["الطلب","العميل","الحالة","التاريخ"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
+                  {["out_of_stock","low_stock"].includes(k.key) && ["SKU","المستودع","الكمية"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
+                  {k.key==="late_po" && ["PO","المورد","الاستحقاق","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
+                  {k.key==="open_complaints" && ["#","العميل","الموضوع","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
+                </tr></thead>
                 <tbody>
-                  {items.slice(0,10).map((item: any, i: number)=>(
+                  {items.slice(0,10).map((item,i)=>(
                     <tr key={i} style={{borderBottom:"1px solid #141420",background:i%2===0?"transparent":"#0d0d14"}}>
-                      {k.rawKey==="late_orders" && <>
+                      {k.key==="late_orders" && <>
                         <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
                         <td style={{padding:"7px 10px",maxWidth:"120px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.customer}</td>
                         <td style={{padding:"7px 10px"}}><span style={{background:item.days_late>30?"#1f0d0d":"#1a1400",color:item.days_late>30?"#f87171":"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.days_late} يوم</span></td>
                         <td style={{padding:"7px 10px",color:"#fbbf24",fontSize:"11px"}}>{item.amount?`${Number(item.amount).toLocaleString()} ر.س`:"—"}</td>
-                        <td style={{padding:"7px 10px"}}><span style={{background:"#1f0d0d",color:"#f87171",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
                       </>}
-                      {k.rawKey==="stuck_orders" && <>
+                      {k.key==="stuck_orders" && <>
                         <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
                         <td style={{padding:"7px 10px"}}>{item.customer}</td>
                         <td style={{padding:"7px 10px"}}><span style={{background:"#1a1400",color:"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
                         <td style={{padding:"7px 10px",color:"#888",fontSize:"11px"}}>{item.date}</td>
                       </>}
-                      {["out_of_stock","low_stock"].includes(k.rawKey) && <>
+                      {["out_of_stock","low_stock"].includes(k.key) && <>
                         <td style={{padding:"7px 10px",color:"#c8b8ff"}}>{item.sku}</td>
                         <td style={{padding:"7px 10px",color:"#888"}}>{item.warehouse}</td>
-                        <td style={{padding:"7px 10px"}}><span style={{background:k.rawKey==="out_of_stock"?"#1f0d0d":"#1a1400",color:k.rawKey==="out_of_stock"?"#f87171":"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.qty}</span></td>
+                        <td style={{padding:"7px 10px"}}><span style={{background:k.key==="out_of_stock"?"#1f0d0d":"#1a1400",color:k.key==="out_of_stock"?"#f87171":"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.qty}</span></td>
                       </>}
-                      {k.rawKey==="late_po" && <>
+                      {k.key==="late_po" && <>
                         <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
                         <td style={{padding:"7px 10px"}}>{item.supplier}</td>
                         <td style={{padding:"7px 10px",color:"#f87171"}}>{item.due}</td>
                         <td style={{padding:"7px 10px"}}><span style={{background:"#1f0d0d",color:"#f87171",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
                       </>}
-                      {k.rawKey==="open_complaints" && <>
+                      {k.key==="open_complaints" && <>
                         <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
                         <td style={{padding:"7px 10px"}}>{item.customer}</td>
                         <td style={{padding:"7px 10px",color:"#888",maxWidth:"150px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.subject}</td>
@@ -653,34 +626,31 @@ export default function Home() {
               {items.length > 10 && <div style={{padding:"8px",fontSize:"11px",color:"#555",textAlign:"center"}}>+ {items.length-10} سجل إضافي</div>}
             </div>
           )}
-
-          {/* Action Buttons */}
           <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
             <button style={{padding:"7px 14px",background:"#1a2a1e",border:"1px solid #4ade80",borderRadius:"8px",color:"#4ade80",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>📋 إنشاء Tasks</button>
-            <button style={{padding:"7px 14px",background:"#1a2a1e",border:"1px solid #25d366",borderRadius:"8px",color:"#25d366",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>💬 إرسال واتساب</button>
-            <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>📊 تصدير Excel</button>
-            <a href={`http://144.91.102.29`} target="_blank" rel="noopener noreferrer" style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #555",borderRadius:"8px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",textDecoration:"none"}}>🔗 فتح ERPNext ↗</a>
+            <button style={{padding:"7px 14px",background:"#1a2a1e",border:"1px solid #25d366",borderRadius:"8px",color:"#25d366",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>💬 واتساب</button>
+            <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>📊 Excel</button>
+            <a href="http://144.91.102.29" target="_blank" rel="noopener noreferrer" style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #555",borderRadius:"8px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",textDecoration:"none"}}>🔗 ERPNext ↗</a>
           </div>
         </div>
       );
     };
 
-    const KpiCard = ({k, i}: {k: any, i: number}) => (
+    const KCard = ({k,i}) => (
       <div onClick={()=>setActiveKpi(activeKpi===i?null:i)}
-        style={{background:"#111118",border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`,borderTop:`3px solid ${sevColor(k.severity)}`,borderRadius:"12px",padding:"14px",cursor:"pointer",position:"relative",transition:"all .15s",boxShadow:activeKpi===i?"0 0 0 2px rgba(55,138,221,0.15)":"none"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
+        style={{background:"#111118",border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`,borderTop:`3px solid ${sc(k.sev)}`,borderRadius:"12px",padding:"14px",cursor:"pointer",position:"relative",transition:"all .15s"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}>
           <div style={{fontSize:"11px",color:"#666"}}>{k.n}</div>
-          <span style={{background:sevBg(k.severity),color:sevColor(k.severity),padding:"1px 7px",borderRadius:"8px",fontSize:"10px"}}>{sevLabel(k.severity)}</span>
+          <span style={{background:sb(k.sev),color:sc(k.sev),padding:"1px 7px",borderRadius:"8px",fontSize:"10px"}}>{sl(k.sev)}</span>
         </div>
-        <div style={{fontSize:"24px",fontWeight:"700",color:sevColor(k.severity),lineHeight:"1.1",marginBottom:"2px"}}>
-          {erpLoading ? <span style={{width:10,height:10,border:`2px solid #333`,borderTopColor:sevColor(k.severity),borderRadius:"50%",display:"inline-block",animation:"spin .8s linear infinite"}}/> : k.val}
-          <span style={{fontSize:"13px",fontWeight:"400",color:"#555",marginRight:"4px"}}>{k.unit}</span>
+        <div style={{fontSize:"24px",fontWeight:"700",color:sc(k.sev),lineHeight:"1.1",marginBottom:"2px"}}>
+          {erpLoading?<span style={{width:10,height:10,border:`2px solid #333`,borderTopColor:sc(k.sev),borderRadius:"50%",display:"inline-block",animation:"spin .8s linear infinite"}}/>:k.val}
+          <span style={{fontSize:"12px",fontWeight:"400",color:"#555",marginRight:"4px"}}>{k.unit}</span>
         </div>
         <div style={{fontSize:"10px",color:"#555"}}>{k.target}</div>
         <div style={{height:"3px",background:"#1a1a2e",borderRadius:"2px",marginTop:"8px"}}>
-          <div style={{width:`${k.pct}%`,height:"100%",background:sevColor(k.severity),borderRadius:"2px",transition:"width .6s"}}></div>
+          <div style={{width:`${k.pct}%`,height:"100%",background:sc(k.sev),borderRadius:"2px",transition:"width .6s"}}></div>
         </div>
-        {activeKpi===i && <div style={{position:"absolute",bottom:"-8px",left:"50%",transform:"translateX(-50%)",width:0,height:0,borderLeft:"7px solid transparent",borderRight:"7px solid transparent",borderTop:"7px solid #378ADD"}}></div>}
       </div>
     );
 
@@ -692,16 +662,14 @@ export default function Home() {
           {sidebarJSX}
           <div style={{flex:1,padding:"28px 32px",overflowY:"auto"}}>
 
-            {/* Header */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"20px"}}>
               <div>
                 <h1 style={{fontSize:"22px",fontWeight:"800",margin:"0 0 3px"}}>مركز القرار 📊</h1>
                 <div style={{fontSize:"12px",display:"flex",alignItems:"center",gap:"6px"}}>
-                  {erpLoading
-                    ? <span style={{color:"#555",display:"flex",alignItems:"center",gap:"4px"}}><span style={{width:7,height:7,border:"2px solid #333",borderTopColor:"#c8b8ff",borderRadius:"50%",display:"inline-block",animation:"spin .8s linear infinite"}}/>جاري الجلب من ERPNext...</span>
-                    : erpError ? <span style={{color:"#f87171"}}>⚠️ {erpError}</span>
-                    : d ? <span style={{color:"#4ade80",display:"flex",alignItems:"center",gap:"4px"}}><span style={{width:7,height:7,borderRadius:"50%",background:"#4ade80",animation:"pulse 2s infinite"}}/>ERPNext متصل · {lastFetched}</span>
-                    : null}
+                  {erpLoading?<span style={{color:"#555",display:"flex",alignItems:"center",gap:"4px"}}><span style={{width:7,height:7,border:"2px solid #333",borderTopColor:"#c8b8ff",borderRadius:"50%",display:"inline-block",animation:"spin .8s linear infinite"}}/>جاري الجلب...</span>
+                  :erpError?<span style={{color:"#f87171"}}>⚠️ {erpError}</span>
+                  :d?<span style={{color:"#4ade80",display:"flex",alignItems:"center",gap:"4px"}}><span style={{width:7,height:7,borderRadius:"50%",background:"#4ade80",animation:"pulse 2s infinite"}}/>ERPNext متصل · {lastFetched}</span>
+                  :null}
                 </div>
               </div>
               <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
@@ -712,37 +680,33 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Priority Score */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"10px",marginBottom:"18px"}}>
-              {[{label:"🔥 حرج",count:critical,color:"#E24B4A",bg:"#1f0d0d",border:"#3a1a1a"},{label:"⚠️ تحذير",count:warning,color:"#EF9F27",bg:"#1a1400",border:"#3a2800"},{label:"✅ جيد",count:good,color:"#1D9E75",bg:"#0d1f0d",border:"#1a3a1a"}].map(g=>(
-                <div key={g.label} style={{background:g.bg,border:`1px solid ${g.border}`,borderRadius:"12px",padding:"14px 16px"}}>
-                  <div style={{fontSize:"12px",fontWeight:"700",color:g.color,marginBottom:"6px"}}>{g.label}</div>
-                  <div style={{fontSize:"28px",fontWeight:"800",color:g.color}}>{g.count}</div>
+              {[{l:"🔥 حرج",c:critical,col:"#E24B4A",bg:"#1f0d0d",br:"#3a1a1a"},{l:"⚠️ تحذير",c:warning,col:"#EF9F27",bg:"#1a1400",br:"#3a2800"},{l:"✅ جيد",c:good,col:"#1D9E75",bg:"#0d1f0d",br:"#1a3a1a"}].map(g=>(
+                <div key={g.l} style={{background:g.bg,border:`1px solid ${g.br}`,borderRadius:"12px",padding:"14px 16px"}}>
+                  <div style={{fontSize:"12px",fontWeight:"700",color:g.col,marginBottom:"4px"}}>{g.l}</div>
+                  <div style={{fontSize:"30px",fontWeight:"800",color:g.col}}>{g.c}</div>
                   <div style={{fontSize:"10px",color:"#555",marginTop:"2px"}}>مؤشر</div>
                 </div>
               ))}
             </div>
 
-            {/* KPI Grid Row 1 */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"8px"}}>
-              {kpiDefs.slice(0,5).map((k,i)=><KpiCard key={i} k={k} i={i}/>)}
+              {kpis.slice(0,5).map((k,i)=><KCard key={i} k={k} i={i}/>)}
             </div>
-            {activeKpi!==null && activeKpi<5 && renderDrill(activeKpi)}
+            {activeKpi!==null&&activeKpi<5&&<DrillPanel idx={activeKpi}/>}
 
-            {/* KPI Grid Row 2 */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"8px"}}>
-              {kpiDefs.slice(5).map((k,ii)=><KpiCard key={ii+5} k={k} i={ii+5}/>)}
+              {kpis.slice(5).map((k,ii)=><KCard key={ii+5} k={k} i={ii+5}/>)}
             </div>
-            {activeKpi!==null && activeKpi>=5 && renderDrill(activeKpi)}
+            {activeKpi!==null&&activeKpi>=5&&<DrillPanel idx={activeKpi}/>}
 
-            {/* Bottom: Executive Summary + Alerts */}
             <div style={{display:"grid",gridTemplateColumns:"1.2fr .8fr",gap:"12px",marginTop:"8px"}}>
               <div style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:"14px",padding:"18px"}}>
-                <div style={{fontSize:"14px",fontWeight:"700",marginBottom:"14px"}}>الملخص التنفيذي</div>
+                <div style={{fontSize:"14px",fontWeight:"700",marginBottom:"12px"}}>الملخص التنفيذي</div>
                 <div style={{background:"#0a1520",border:"1px solid #1e3a5f",borderRadius:"10px",padding:"12px",marginBottom:"12px"}}>
-                  <div style={{fontSize:"11px",color:"#f87171",fontWeight:"700",marginBottom:"6px"}}>أعلى مخاطرة</div>
+                  <div style={{fontSize:"11px",color:"#60a5fa",fontWeight:"700",marginBottom:"6px"}}>أعلى مخاطرة</div>
                   <p style={{fontSize:"12px",color:"#b0c4de",lineHeight:"1.7",margin:0}}>
-                    {d ? `الطلبات المتأخرة ${d.late_orders?.count??0} طلب · المنتجات النافدة ${d.out_of_stock?.count??0} SKU · تأخر الموردين ${d.late_po?.count??0} PO` : "جاري تحميل البيانات..."}
+                    {d?`الطلبات المتأخرة: ${d.late_orders?.count||0} · النافدة: ${d.out_of_stock?.count||0} SKU · تأخر الموردين: ${d.late_po?.count||0} PO`:"جاري تحميل البيانات..."}
                   </p>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"8px",marginBottom:"12px"}}>
@@ -753,23 +717,22 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                  <button style={{padding:"7px 14px",background:"#1a2a1e",border:"1px solid #4ade80",borderRadius:"8px",color:"#4ade80",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>📋 إنشاء مهام للفريق</button>
+                <div style={{display:"flex",gap:"8px"}}>
+                  <button style={{padding:"7px 14px",background:"#1a2a1e",border:"1px solid #4ade80",borderRadius:"8px",color:"#4ade80",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>📋 إنشاء مهام</button>
                   <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>💬 واتساب للإدارة</button>
                 </div>
               </div>
-
               <div style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:"14px",padding:"18px"}}>
                 <div style={{fontSize:"14px",fontWeight:"700",marginBottom:"12px"}}>جودة البيانات</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"12px"}}>
-                  {[["آخر مزامنة",lastFetched||"—"],["مصدر","ERPNext"],["الطلبات",String(d?.late_orders?.count??0)+" متأخرة"],["المخزون",String(d?.out_of_stock?.count??0)+" نافد"]].map(([l,v])=>(
+                  {[["آخر مزامنة",lastFetched||"—"],["مصدر","ERPNext"],["متأخرة",String(d?.late_orders?.count||0)],["نافدة",String(d?.out_of_stock?.count||0)+" SKU"]].map(([l,v])=>(
                     <div key={l} style={{background:"#0a0a0f",borderRadius:"8px",padding:"10px",textAlign:"center"}}>
                       <div style={{fontSize:"10px",color:"#555",marginBottom:"4px"}}>{l}</div>
                       <div style={{fontSize:"13px",fontWeight:"600",color:"#c8b8ff"}}>{v}</div>
                     </div>
                   ))}
                 </div>
-                <a href="http://144.91.102.29" target="_blank" rel="noopener noreferrer" style={{display:"block",padding:"8px 14px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",textDecoration:"none",textAlign:"center"}}>🔗 فتح ERPNext ↗</a>
+                <a href="http://144.91.102.29" target="_blank" rel="noopener noreferrer" style={{display:"block",padding:"8px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",textDecoration:"none",textAlign:"center"}}>🔗 فتح ERPNext ↗</a>
               </div>
             </div>
 

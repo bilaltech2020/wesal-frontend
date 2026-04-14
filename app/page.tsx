@@ -544,7 +544,7 @@ export default function Home() {
     const warning = kpis.filter(k=>k.sev==="warning").length;
     const good = kpis.filter(k=>k.sev==="good").length;
 
-    const DrillPanel = ({idx}) => {
+    const renderDrill = (idx) => {
       const k = kpis[idx];
       const raw = d?.[k.key];
       const items = raw?.items || [];
@@ -636,7 +636,7 @@ export default function Home() {
       );
     };
 
-    const KCard = ({k,i}) => (
+    const renderKCard = (k, i) => (
       <div onClick={()=>setActiveKpi(activeKpi===i?null:i)}
         style={{background:"#111118",border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`,borderTop:`3px solid ${sc(k.sev)}`,borderRadius:"12px",padding:"14px",cursor:"pointer",position:"relative",transition:"all .15s"}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}>
@@ -691,14 +691,14 @@ export default function Home() {
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"8px"}}>
-              {kpis.slice(0,5).map((k,i)=><KCard key={i} k={k} i={i}/>)}
+              {kpis.slice(0,5).map((k,i)=>renderKCard(k, i))}
             </div>
-            {activeKpi!==null&&activeKpi<5&&<DrillPanel idx={activeKpi}/>}
+            {activeKpi!==null&&activeKpi<5&&renderDrill(activeKpi)}
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"8px"}}>
-              {kpis.slice(5).map((k,ii)=><KCard key={ii+5} k={k} i={ii+5}/>)}
+              {kpis.slice(5).map((k,ii)=>renderKCard(k, ii+5))}
             </div>
-            {activeKpi!==null&&activeKpi>=5&&<DrillPanel idx={activeKpi}/>}
+            {activeKpi!==null&&activeKpi>=5&&renderDrill(activeKpi)}
 
             <div style={{display:"grid",gridTemplateColumns:"1.2fr .8fr",gap:"12px",marginTop:"8px"}}>
               <div style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:"14px",padding:"18px"}}>

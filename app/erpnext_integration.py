@@ -1,55 +1,72 @@
 """
-ERPNext Integration for Wesal KPI Dashboard
-URL: http://144.91.102.29
+ERPNext Integration for Outath / Wesal KPI Dashboard
+Credentials loaded from environment variables — never hard-coded.
 """
 
+import os
+import asyncio
 import httpx
 from datetime import datetime, timedelta
 from typing import Any
 
-ERP_URL = "http://144.91.102.29"
-API_KEY = "b938b723b9af108"
-API_SECRET = "0800d09fd60ddeb"
-
-HEADERS = {
-    "Authorization": f"token {API_KEY}:{API_SECRET}",
-    "Content-Type": "application/json",
-}
+ERP_URL = os.getenv("ERPNEXT_URL", "http://144.91.102.29")
+API_KEY = os.getenv("ERPNEXT_API_KEY", "")
+API_SECRET = os.getenv("ERPNEXT_API_SECRET", "")
 
 
-async def erp_get(endpoint: str, params: dict = {}) -> Any:
+def _headers() -> dict:
+    """Build auth headers at call time so env vars are always fresh."""
+    return {
+        "Authorization": f"token {API_KEY}:{API_SECRET}",
+        "Content-Type": "application/json",
+    }
+
+
+async def erp_get(endpoint: str, params: dict | None = None) -> Any:
     url = f"{ERP_URL}/api/resource/{endpoint}"
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(url, headers=HEADERS, params=params)
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(url, headers=_headers(), params=params or {})
         r.raise_for_status()
         return r.json()
 
 
-async def erp_method(method: str, params: dict = {}) -> Any:
+async def erp_method(method: str, params: dict | None = None) -> Any:
     url = f"{ERP_URL}/api/method/{method}"
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(url, headers=HEADERS, params=params)
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(url, headers=_headers(), params=params or {})
         r.raise_for_status()
         return r.json()
 
 
-async def get_all_kpis() -> dict:
-    today = datetime.now().strftime("%Y-%m-%d")
-    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-    month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+def _date_range(period: str) -> tuple[str, str]:
+    """Return (from_date, to_date) strings for the requested period."""
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    if period == "today":
+        return today, today
+    if period == "week":
+        return (now - timedelta(days=7)).strftime("%Y-%m-%d"), today
+    if period == "month":
+        return now.replace(day=1).strftime("%Y-%m-%d"), today
+    if period == "quarter":
+        return (now - timedelta(days=90)).strftime("%Y-%m-%d"), today
+    if period == "year":
+        return now.replace(month=1, day=1).strftime("%Y-%m-%d"), today
+    return now.replace(day=1).strftime("%Y-%m-%d"), today  # default: month
 
-    results = {}
 
-    # ① الطلبات المتأخرة — Sales Orders past delivery date, not delivered
+# ─── Individual KPI fetchers ────────────────────────────────────────────────
+
+async def _late_orders(today: str) -> dict:
     try:
         data = await erp_get("Sales Order", {
             "filters": f'[["delivery_date","<","{today}"],["status","not in",["Delivered","Cancelled"]]]',
             "fields": '["name","delivery_date","status","customer","grand_total","transaction_date"]',
-            "limit_page_length": 50,
+            "limit_page_length": 100,
         })
-        late_orders = data.get("data", [])
-        results["late_orders"] = {
-            "count": len(late_orders),
+        items = data.get("data", [])
+        return {
+            "count": len(items),
             "items": [
                 {
                     "id": o["name"],
@@ -57,166 +74,260 @@ async def get_all_kpis() -> dict:
                     "delivery_date": o.get("delivery_date", "—"),
                     "status": o.get("status", "—"),
                     "amount": o.get("grand_total", 0),
-                    "days_late": (datetime.now() - datetime.strptime(o["delivery_date"], "%Y-%m-%d")).days
-                    if o.get("delivery_date") else 0,
+                    "days_late": (
+                        datetime.now() - datetime.strptime(o["delivery_date"], "%Y-%m-%d")
+                    ).days if o.get("delivery_date") else 0,
                 }
-                for o in late_orders
+                for o in items
             ],
         }
     except Exception as e:
-        results["late_orders"] = {"count": 0, "items": [], "error": str(e)}
+        return {"count": 0, "items": [], "error": str(e)}
 
-    # ② الطلبات العالقة — Sales Orders in "To Deliver and Bill" or "To Bill" > 3 days
+
+async def _stuck_orders(week_ago: str) -> dict:
     try:
         data = await erp_get("Sales Order", {
             "filters": f'[["status","in",["To Deliver and Bill","To Deliver"]],["transaction_date","<","{week_ago}"]]',
             "fields": '["name","status","customer","transaction_date","grand_total"]',
-            "limit_page_length": 50,
-        })
-        stuck = data.get("data", [])
-        results["stuck_orders"] = {
-            "count": len(stuck),
-            "items": [{"id": o["name"], "customer": o.get("customer"), "status": o.get("status"), "date": o.get("transaction_date")} for o in stuck],
-        }
-    except Exception as e:
-        results["stuck_orders"] = {"count": 0, "items": [], "error": str(e)}
-
-    # ③ وقت المعالجة — avg days from creation to delivery
-    try:
-        data = await erp_get("Sales Order", {
-            "filters": f'[["status","=","Delivered"],["transaction_date",">=","{month_start}"]]',
-            "fields": '["name","transaction_date","delivery_date"]',
             "limit_page_length": 100,
         })
-        delivered = data.get("data", [])
-        if delivered:
-            diffs = []
-            for o in delivered:
-                try:
-                    t = datetime.strptime(o["transaction_date"], "%Y-%m-%d")
-                    d = datetime.strptime(o["delivery_date"], "%Y-%m-%d")
-                    diffs.append((d - t).days)
-                except Exception:
-                    pass
-            avg_days = round(sum(diffs) / len(diffs), 1) if diffs else 0
-        else:
-            avg_days = 0
-        results["avg_processing_days"] = {"value": avg_days, "target": 1.5, "sample": len(delivered)}
+        items = data.get("data", [])
+        return {
+            "count": len(items),
+            "items": [
+                {"id": o["name"], "customer": o.get("customer"), "status": o.get("status"), "date": o.get("transaction_date")}
+                for o in items
+            ],
+        }
     except Exception as e:
-        results["avg_processing_days"] = {"value": 0, "target": 1.5, "error": str(e)}
+        return {"count": 0, "items": [], "error": str(e)}
 
-    # ④ المنتجات النافدة — Items with actual_qty = 0
+
+async def _avg_processing(from_date: str) -> dict:
+    try:
+        data = await erp_get("Sales Order", {
+            "filters": f'[["status","=","Delivered"],["transaction_date",">=","{from_date}"]]',
+            "fields": '["name","transaction_date","delivery_date"]',
+            "limit_page_length": 200,
+        })
+        delivered = data.get("data", [])
+        diffs = []
+        for o in delivered:
+            try:
+                t = datetime.strptime(o["transaction_date"], "%Y-%m-%d")
+                d = datetime.strptime(o["delivery_date"], "%Y-%m-%d")
+                diffs.append((d - t).days)
+            except Exception:
+                pass
+        avg = round(sum(diffs) / len(diffs), 1) if diffs else 0
+        return {"value": avg, "target": 1.5, "sample": len(delivered)}
+    except Exception as e:
+        return {"value": 0, "target": 1.5, "error": str(e)}
+
+
+async def _out_of_stock() -> dict:
     try:
         data = await erp_method("frappe.client.get_list", {
             "doctype": "Bin",
             "filters": '[["actual_qty","<=","0"]]',
             "fields": '["item_code","warehouse","actual_qty","reserved_qty"]',
-            "limit_page_length": 100,
+            "limit_page_length": 200,
         })
-        out_of_stock = data.get("message", [])
-        results["out_of_stock"] = {
-            "count": len(out_of_stock),
-            "items": [{"sku": i.get("item_code"), "warehouse": i.get("warehouse"), "qty": i.get("actual_qty", 0)} for i in out_of_stock],
+        items = data.get("message", [])
+        return {
+            "count": len(items),
+            "items": [{"sku": i.get("item_code"), "warehouse": i.get("warehouse"), "qty": i.get("actual_qty", 0)} for i in items],
         }
     except Exception as e:
-        results["out_of_stock"] = {"count": 0, "items": [], "error": str(e)}
+        return {"count": 0, "items": [], "error": str(e)}
 
-    # ⑤ قريبة من النفاد — Items where actual_qty < reorder_level
+
+async def _low_stock() -> dict:
     try:
         data = await erp_method("frappe.client.get_list", {
             "doctype": "Bin",
             "filters": '[["actual_qty","<","10"],["actual_qty",">","0"]]',
             "fields": '["item_code","warehouse","actual_qty","reserved_qty","projected_qty"]',
-            "limit_page_length": 100,
+            "limit_page_length": 200,
         })
-        low_stock = data.get("message", [])
-        results["low_stock"] = {
-            "count": len(low_stock),
-            "items": [{"sku": i.get("item_code"), "warehouse": i.get("warehouse"), "qty": i.get("actual_qty", 0)} for i in low_stock],
+        items = data.get("message", [])
+        return {
+            "count": len(items),
+            "items": [{"sku": i.get("item_code"), "warehouse": i.get("warehouse"), "qty": i.get("actual_qty", 0)} for i in items],
         }
     except Exception as e:
-        results["low_stock"] = {"count": 0, "items": [], "error": str(e)}
+        return {"count": 0, "items": [], "error": str(e)}
 
-    # ⑥ تأخير الموردين — Purchase Orders overdue
+
+async def _late_po(today: str) -> dict:
     try:
         data = await erp_get("Purchase Order", {
             "filters": f'[["schedule_date","<","{today}"],["status","not in",["Delivered","Cancelled","Closed"]]]',
             "fields": '["name","supplier","schedule_date","status","grand_total"]',
-            "limit_page_length": 50,
+            "limit_page_length": 100,
         })
-        late_po = data.get("data", [])
-        results["late_po"] = {
-            "count": len(late_po),
-            "items": [{"id": o["name"], "supplier": o.get("supplier"), "due": o.get("schedule_date"), "status": o.get("status")} for o in late_po],
+        items = data.get("data", [])
+        return {
+            "count": len(items),
+            "items": [
+                {"id": o["name"], "supplier": o.get("supplier"), "due": o.get("schedule_date"), "status": o.get("status"), "amount": o.get("grand_total", 0)}
+                for o in items
+            ],
         }
     except Exception as e:
-        results["late_po"] = {"count": 0, "items": [], "error": str(e)}
+        return {"count": 0, "items": [], "error": str(e)}
 
-    # ⑦ الشكاوى المفتوحة — Issues / Complaints open
+
+async def _open_complaints() -> dict:
     try:
         data = await erp_get("Issue", {
             "filters": '[["status","in",["Open","Replied"]]]',
             "fields": '["name","subject","status","creation","customer"]',
-            "limit_page_length": 50,
+            "limit_page_length": 100,
         })
         issues = data.get("data", [])
-        # بدون رد +24h
-        no_reply_24h = [i for i in issues if i.get("status") == "Open"]
-        results["open_complaints"] = {
+        cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+        no_reply = [i for i in issues if i.get("status") == "Open" and i.get("creation", "") < cutoff]
+        return {
             "count": len(issues),
-            "no_reply_24h": len(no_reply_24h),
-            "items": [{"id": i["name"], "subject": i.get("subject"), "status": i.get("status"), "customer": i.get("customer")} for i in issues],
+            "no_reply_24h": len(no_reply),
+            "items": [{"id": i["name"], "subject": i.get("subject"), "status": i.get("status"), "customer": i.get("customer"), "created": i.get("creation")} for i in issues],
         }
     except Exception as e:
-        results["open_complaints"] = {"count": 0, "no_reply_24h": 0, "items": [], "error": str(e)}
+        return {"count": 0, "no_reply_24h": 0, "items": [], "error": str(e)}
 
-    # ⑧ وقت الرد على العملاء — avg response time on Issues
+
+async def _avg_response(from_date: str) -> dict:
     try:
         data = await erp_get("Issue", {
-            "filters": f'[["creation",">=","{month_start}"],["status","=","Closed"]]',
+            "filters": f'[["creation",">=","{from_date}"],["status","=","Closed"]]',
             "fields": '["name","creation","first_responded_on","resolution_time"]',
-            "limit_page_length": 100,
+            "limit_page_length": 200,
         })
         closed = data.get("data", [])
         times = [i.get("resolution_time", 0) for i in closed if i.get("resolution_time")]
         avg_hours = round(sum(times) / len(times) / 3600, 1) if times else 0
-        results["avg_response_hours"] = {"value": avg_hours, "target": 2, "sample": len(closed)}
+        return {"value": avg_hours, "target": 2, "sample": len(closed)}
     except Exception as e:
-        results["avg_response_hours"] = {"value": 0, "target": 2, "error": str(e)}
+        return {"value": 0, "target": 2, "error": str(e)}
 
-    # ⑨ المبيعات اليومية
+
+async def _daily_sales(from_date: str, to_date: str) -> dict:
     try:
         data = await erp_get("Sales Invoice", {
-            "filters": f'[["posting_date","=","{today}"],["docstatus","=","1"]]',
-            "fields": '["name","grand_total","customer"]',
+            "filters": f'[["posting_date",">=","{from_date}"],["posting_date","<=","{to_date}"],["docstatus","=","1"]]',
+            "fields": '["name","grand_total","customer","posting_date"]',
             "limit_page_length": 500,
         })
         invoices = data.get("data", [])
-        daily_sales = sum(i.get("grand_total", 0) for i in invoices)
-        results["daily_sales"] = {
-            "value": daily_sales,
+        total = sum(i.get("grand_total", 0) for i in invoices)
+        return {
+            "value": round(total, 2),
             "target": 20000,
             "orders_count": len(invoices),
         }
     except Exception as e:
-        results["daily_sales"] = {"value": 0, "target": 20000, "error": str(e)}
+        return {"value": 0, "target": 20000, "error": str(e)}
 
-    # ⑩ التوصيل في الوقت — % orders delivered on or before delivery_date
+
+async def _on_time_delivery(from_date: str) -> dict:
+    """
+    Real on-time calculation:
+    Joins Delivery Note → Sales Order to compare actual posting_date vs SO delivery_date.
+    """
     try:
-        data = await erp_get("Delivery Note", {
-            "filters": f'[["posting_date",">=","{month_start}"],["docstatus","=","1"]]',
-            "fields": '["name","posting_date","lr_date","customer"]',
+        dn_data = await erp_get("Delivery Note", {
+            "filters": f'[["posting_date",">=","{from_date}"],["docstatus","=","1"]]',
+            "fields": '["name","posting_date","customer","against_sales_order"]',
             "limit_page_length": 500,
         })
-        deliveries = data.get("data", [])
-        on_time = len(deliveries)  # نحسبها بعد ربط delivery_date من SO
-        results["on_time_delivery"] = {
-            "count": len(deliveries),
-            "on_time": on_time,
-            "pct": 86,  # placeholder حتى نربط مع SO
-            "target": 95,
-        }
-    except Exception as e:
-        results["on_time_delivery"] = {"count": 0, "on_time": 0, "pct": 0, "target": 95, "error": str(e)}
+        deliveries = dn_data.get("data", [])
+        if not deliveries:
+            return {"count": 0, "on_time": 0, "pct": 0, "target": 95}
 
-    return results
+        # Fetch promised delivery dates from linked Sales Orders
+        so_names = list({d.get("against_sales_order") for d in deliveries if d.get("against_sales_order")})
+        so_map: dict[str, str] = {}
+        if so_names:
+            chunk = ",".join(f'"{n}"' for n in so_names[:100])
+            so_data = await erp_get("Sales Order", {
+                "filters": f'[["name","in",[{chunk}]]]',
+                "fields": '["name","delivery_date"]',
+                "limit_page_length": 100,
+            })
+            for so in so_data.get("data", []):
+                if so.get("delivery_date"):
+                    so_map[so["name"]] = so["delivery_date"]
+
+        on_time = 0
+        late = 0
+        for dn in deliveries:
+            promised = so_map.get(dn.get("against_sales_order", ""))
+            actual = dn.get("posting_date")
+            if promised and actual:
+                if actual <= promised:
+                    on_time += 1
+                else:
+                    late += 1
+            else:
+                on_time += 1  # no promised date → count as ok
+
+        total = len(deliveries)
+        pct = round(on_time / total * 100, 1) if total else 0
+        return {"count": total, "on_time": on_time, "late": late, "pct": pct, "target": 95}
+    except Exception as e:
+        return {"count": 0, "on_time": 0, "pct": 0, "target": 95, "error": str(e)}
+
+
+# ─── Main entry point ────────────────────────────────────────────────────────
+
+async def get_all_kpis(period: str = "month") -> dict:
+    """
+    Fetch all 10 KPIs in parallel for the requested period.
+    period: "today" | "week" | "month" | "quarter" | "year"
+    """
+    from_date, to_date = _date_range(period)
+    today = datetime.now().strftime("%Y-%m-%d")
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    (
+        late_orders,
+        stuck_orders,
+        avg_processing,
+        out_of_stock,
+        low_stock,
+        late_po,
+        open_complaints,
+        avg_response,
+        daily_sales,
+        on_time,
+    ) = await asyncio.gather(
+        _late_orders(today),
+        _stuck_orders(week_ago),
+        _avg_processing(from_date),
+        _out_of_stock(),
+        _low_stock(),
+        _late_po(today),
+        _open_complaints(),
+        _avg_response(from_date),
+        _daily_sales(from_date, to_date),
+        _on_time_delivery(from_date),
+    )
+
+    return {
+        "period": period,
+        "from_date": from_date,
+        "to_date": to_date,
+        "fetched_at": datetime.now().isoformat(),
+        "late_orders": late_orders,
+        "stuck_orders": stuck_orders,
+        "avg_processing_days": avg_processing,
+        "out_of_stock": out_of_stock,
+        "low_stock": low_stock,
+        "late_po": late_po,
+        "open_complaints": open_complaints,
+        "avg_response_hours": avg_response,
+        "daily_sales": daily_sales,
+        "on_time_delivery": on_time,
+    }

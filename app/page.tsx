@@ -108,8 +108,8 @@ export default function Home() {
     try {
       const res = await fetch(`${API_URL}/erpnext-kpis?period=${PERIODS[idx]}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setErpData(data);
+      const json = await res.json();
+      setErpData(json.data ?? json);
       setLastFetched(new Date().toLocaleTimeString("ar-SA"));
     } catch (e: unknown) {
       setErpError(e instanceof Error ? e.message : "فشل الاتصال بـ ERPNext");

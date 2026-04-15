@@ -92,6 +92,38 @@ export default function Home() {
   // Reports / KPIs
   const [activeKpi, setActiveKpi] = useState<number | null>(null);
 
+  // ERP / Reports state
+  const [erpData, setErpData] = useState<any>(null);
+  const [erpLoading, setErpLoading] = useState(false);
+  const [erpError, setErpError] = useState("");
+  const [timePeriod, setTimePeriod] = useState(0);
+  const [lastFetched, setLastFetched] = useState("");
+
+  const PERIODS = ["today", "week", "month", "quarter", "year"];
+
+  const fetchKpis = async (periodIdx?: number) => {
+    const idx = periodIdx !== undefined ? periodIdx : timePeriod;
+    setErpLoading(true);
+    setErpError("");
+    try {
+      const res = await fetch(`${API_URL}/erpnext-kpis?period=${PERIODS[idx]}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setErpData(data);
+      setLastFetched(new Date().toLocaleTimeString("ar-SA"));
+    } catch (e: unknown) {
+      setErpError(e instanceof Error ? e.message : "فشل الاتصال بـ ERPNext");
+    } finally {
+      setErpLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (view === "reports" && !erpData && !erpLoading) {
+      fetchKpis(0);
+    }
+  }, [view]);
+
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;

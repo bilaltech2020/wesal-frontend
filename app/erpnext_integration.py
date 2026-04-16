@@ -15,7 +15,6 @@ API_SECRET = os.getenv("ERPNEXT_API_SECRET", "")
 
 
 def _headers() -> dict:
-    """Build auth headers at call time so env vars are always fresh."""
     return {
         "Authorization": f"token {API_KEY}:{API_SECRET}",
         "Content-Type": "application/json",
@@ -45,11 +44,14 @@ def _date_range(period: str) -> tuple[str, str]:
     if period == "today":
         return today, today
     if period == "week":
-        return (now - timedelta(days=7)).strftime("%Y-%m-%d"), today
+        # بداية الأسبوع الحالي (الأحد أو الاثنين حسب تفضيلك)
+        start = now - timedelta(days=now.weekday())
+        return start.strftime("%Y-%m-%d"), today
     if period == "month":
         return now.replace(day=1).strftime("%Y-%m-%d"), today
     if period == "quarter":
-        return (now - timedelta(days=90)).strftime("%Y-%m-%d"), today
+        q_start_month = ((now.month - 1) // 3) * 3 + 1
+        return now.replace(month=q_start_month, day=1).strftime("%Y-%m-%d"), today
     if period == "year":
         return now.replace(month=1, day=1).strftime("%Y-%m-%d"), today
     return now.replace(day=1).strftime("%Y-%m-%d"), today  # default: month
@@ -57,12 +59,22 @@ def _date_range(period: str) -> tuple[str, str]:
 
 # ─── Individual KPI fetchers ────────────────────────────────────────────────
 
-async def _late_orders(today: str) -> dict:
+async def _late_orders(from_date: str, to_date: str) -> dict:
+    """
+    الطلبات المتأخرة ضمن الفترة المختارة:
+    - delivery_date انتهى (< to_date)
+    - تاريخ الطلب >= from_date
+    - لم تُسلَّم بعد
+    """
     try:
         data = await erp_get("Sales Order", {
-            "filters": f'[["delivery_date","<","{today}"],["status","not in",["Delivered","Cancelled"]]]',
+            "filters": (
+                f'[["delivery_date","<","{to_date}"],'
+                f'["transaction_date",">=","{from_date}"],'
+                f'["status","not in",["Delivered","Cancelled"]]]'
+            ),
             "fields": '["name","delivery_date","status","customer","grand_total","transaction_date"]',
-            "limit_page_length": 100,
+            "limit_page_length": 500,
         })
         items = data.get("data", [])
         return {
@@ -85,18 +97,29 @@ async def _late_orders(today: str) -> dict:
         return {"count": 0, "items": [], "error": str(e)}
 
 
-async def _stuck_orders(week_ago: str) -> dict:
+async def _stuck_orders(from_date: str) -> dict:
+    """
+    الطلبات العالقة: لم تُسلَّم ولم تُلغَ منذ from_date
+    """
     try:
         data = await erp_get("Sales Order", {
-            "filters": f'[["status","in",["To Deliver and Bill","To Deliver"]],["transaction_date","<","{week_ago}"]]',
+            "filters": (
+                f'[["status","in",["To Deliver and Bill","To Deliver"]],'
+                f'["transaction_date",">=","{from_date}"]]'
+            ),
             "fields": '["name","status","customer","transaction_date","grand_total"]',
-            "limit_page_length": 100,
+            "limit_page_length": 500,
         })
         items = data.get("data", [])
         return {
             "count": len(items),
             "items": [
-                {"id": o["name"], "customer": o.get("customer"), "status": o.get("status"), "date": o.get("transaction_date")}
+                {
+                    "id": o["name"],
+                    "customer": o.get("customer"),
+                    "status": o.get("status"),
+                    "date": o.get("transaction_date"),
+                }
                 for o in items
             ],
         }
@@ -109,7 +132,7 @@ async def _avg_processing(from_date: str) -> dict:
         data = await erp_get("Sales Order", {
             "filters": f'[["status","=","Delivered"],["transaction_date",">=","{from_date}"]]',
             "fields": '["name","transaction_date","delivery_date"]',
-            "limit_page_length": 200,
+            "limit_page_length": 500,
         })
         delivered = data.get("data", [])
         diffs = []
@@ -132,12 +155,15 @@ async def _out_of_stock() -> dict:
             "doctype": "Bin",
             "filters": '[["actual_qty","<=","0"]]',
             "fields": '["item_code","warehouse","actual_qty","reserved_qty"]',
-            "limit_page_length": 200,
+            "limit_page_length": 500,
         })
         items = data.get("message", [])
         return {
             "count": len(items),
-            "items": [{"sku": i.get("item_code"), "warehouse": i.get("warehouse"), "qty": i.get("actual_qty", 0)} for i in items],
+            "items": [
+                {"sku": i.get("item_code"), "warehouse": i.get("warehouse"), "qty": i.get("actual_qty", 0)}
+                for i in items
+            ],
         }
     except Exception as e:
         return {"count": 0, "items": [], "error": str(e)}
@@ -149,29 +175,45 @@ async def _low_stock() -> dict:
             "doctype": "Bin",
             "filters": '[["actual_qty","<","10"],["actual_qty",">","0"]]',
             "fields": '["item_code","warehouse","actual_qty","reserved_qty","projected_qty"]',
-            "limit_page_length": 200,
+            "limit_page_length": 500,
         })
         items = data.get("message", [])
         return {
             "count": len(items),
-            "items": [{"sku": i.get("item_code"), "warehouse": i.get("warehouse"), "qty": i.get("actual_qty", 0)} for i in items],
+            "items": [
+                {"sku": i.get("item_code"), "warehouse": i.get("warehouse"), "qty": i.get("actual_qty", 0)}
+                for i in items
+            ],
         }
     except Exception as e:
         return {"count": 0, "items": [], "error": str(e)}
 
 
-async def _late_po(today: str) -> dict:
+async def _late_po(from_date: str, to_date: str) -> dict:
+    """
+    أوامر الشراء المتأخرة ضمن الفترة المختارة
+    """
     try:
         data = await erp_get("Purchase Order", {
-            "filters": f'[["schedule_date","<","{today}"],["status","not in",["Delivered","Cancelled","Closed"]]]',
+            "filters": (
+                f'[["schedule_date",">=","{from_date}"],'
+                f'["schedule_date","<","{to_date}"],'
+                f'["status","not in",["Delivered","Cancelled","Closed"]]]'
+            ),
             "fields": '["name","supplier","schedule_date","status","grand_total"]',
-            "limit_page_length": 100,
+            "limit_page_length": 500,
         })
         items = data.get("data", [])
         return {
             "count": len(items),
             "items": [
-                {"id": o["name"], "supplier": o.get("supplier"), "due": o.get("schedule_date"), "status": o.get("status"), "amount": o.get("grand_total", 0)}
+                {
+                    "id": o["name"],
+                    "supplier": o.get("supplier"),
+                    "due": o.get("schedule_date"),
+                    "status": o.get("status"),
+                    "amount": o.get("grand_total", 0),
+                }
                 for o in items
             ],
         }
@@ -180,11 +222,12 @@ async def _late_po(today: str) -> dict:
 
 
 async def _open_complaints() -> dict:
+    # الشكاوى المفتوحة لا تتأثر بالفترة — دائماً الحالية
     try:
         data = await erp_get("Issue", {
             "filters": '[["status","in",["Open","Replied"]]]',
             "fields": '["name","subject","status","creation","customer"]',
-            "limit_page_length": 100,
+            "limit_page_length": 200,
         })
         issues = data.get("data", [])
         cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
@@ -192,7 +235,16 @@ async def _open_complaints() -> dict:
         return {
             "count": len(issues),
             "no_reply_24h": len(no_reply),
-            "items": [{"id": i["name"], "subject": i.get("subject"), "status": i.get("status"), "customer": i.get("customer"), "created": i.get("creation")} for i in issues],
+            "items": [
+                {
+                    "id": i["name"],
+                    "subject": i.get("subject"),
+                    "status": i.get("status"),
+                    "customer": i.get("customer"),
+                    "created": i.get("creation"),
+                }
+                for i in issues
+            ],
         }
     except Exception as e:
         return {"count": 0, "no_reply_24h": 0, "items": [], "error": str(e)}
@@ -203,7 +255,7 @@ async def _avg_response(from_date: str) -> dict:
         data = await erp_get("Issue", {
             "filters": f'[["creation",">=","{from_date}"],["status","=","Closed"]]',
             "fields": '["name","creation","first_responded_on","resolution_time"]',
-            "limit_page_length": 200,
+            "limit_page_length": 500,
         })
         closed = data.get("data", [])
         times = [i.get("resolution_time", 0) for i in closed if i.get("resolution_time")]
@@ -216,7 +268,11 @@ async def _avg_response(from_date: str) -> dict:
 async def _daily_sales(from_date: str, to_date: str) -> dict:
     try:
         data = await erp_get("Sales Invoice", {
-            "filters": f'[["posting_date",">=","{from_date}"],["posting_date","<=","{to_date}"],["docstatus","=","1"]]',
+            "filters": (
+                f'[["posting_date",">=","{from_date}"],'
+                f'["posting_date","<=","{to_date}"],'
+                f'["docstatus","=","1"]]'
+            ),
             "fields": '["name","grand_total","customer","posting_date"]',
             "limit_page_length": 500,
         })
@@ -231,14 +287,17 @@ async def _daily_sales(from_date: str, to_date: str) -> dict:
         return {"value": 0, "target": 20000, "error": str(e)}
 
 
-async def _on_time_delivery(from_date: str) -> dict:
+async def _on_time_delivery(from_date: str, to_date: str) -> dict:
     """
-    Real on-time calculation:
-    Joins Delivery Note → Sales Order to compare actual posting_date vs SO delivery_date.
+    Real on-time calculation using Delivery Notes vs Sales Order promised dates.
     """
     try:
         dn_data = await erp_get("Delivery Note", {
-            "filters": f'[["posting_date",">=","{from_date}"],["docstatus","=","1"]]',
+            "filters": (
+                f'[["posting_date",">=","{from_date}"],'
+                f'["posting_date","<=","{to_date}"],'
+                f'["docstatus","=","1"]]'
+            ),
             "fields": '["name","posting_date","customer","against_sales_order"]',
             "limit_page_length": 500,
         })
@@ -246,7 +305,6 @@ async def _on_time_delivery(from_date: str) -> dict:
         if not deliveries:
             return {"count": 0, "on_time": 0, "pct": 0, "target": 95}
 
-        # Fetch promised delivery dates from linked Sales Orders
         so_names = list({d.get("against_sales_order") for d in deliveries if d.get("against_sales_order")})
         so_map: dict[str, str] = {}
         if so_names:
@@ -288,8 +346,6 @@ async def get_all_kpis(period: str = "month") -> dict:
     period: "today" | "week" | "month" | "quarter" | "year"
     """
     from_date, to_date = _date_range(period)
-    today = datetime.now().strftime("%Y-%m-%d")
-    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
 
     (
         late_orders,
@@ -303,16 +359,16 @@ async def get_all_kpis(period: str = "month") -> dict:
         daily_sales,
         on_time,
     ) = await asyncio.gather(
-        _late_orders(today),
-        _stuck_orders(week_ago),
+        _late_orders(from_date, to_date),       # ✅ يستخدم from_date + to_date
+        _stuck_orders(from_date),               # ✅ يستخدم from_date
         _avg_processing(from_date),
-        _out_of_stock(),
-        _low_stock(),
-        _late_po(today),
-        _open_complaints(),
+        _out_of_stock(),                        # لا تتأثر بالفترة
+        _low_stock(),                           # لا تتأثر بالفترة
+        _late_po(from_date, to_date),           # ✅ يستخدم from_date + to_date
+        _open_complaints(),                     # لا تتأثر بالفترة
         _avg_response(from_date),
-        _daily_sales(from_date, to_date),
-        _on_time_delivery(from_date),
+        _daily_sales(from_date, to_date),       # ✅ كان صح من البداية
+        _on_time_delivery(from_date, to_date),  # ✅ أُضيف to_date
     )
 
     return {

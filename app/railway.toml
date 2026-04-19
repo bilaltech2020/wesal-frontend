@@ -1,0 +1,14 @@
+[build]
+builder = "NIXPACKS"
+
+[[services]]
+name = "api"
+startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+
+[[services]]
+name = "celery-worker"
+startCommand = "celery -A competitor_monitor.tasks.celery_app worker --loglevel=info --concurrency=2"
+
+[[services]]
+name = "celery-beat"
+startCommand = "celery -A competitor_monitor.tasks.celery_app beat --loglevel=info"

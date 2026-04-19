@@ -25,6 +25,18 @@ interface InventoryResult {
   storeId: string; storeName: string; count: number; products: ProductResult[]; status: "loading" | "done" | "error"; error?: string;
 }
 interface InventorySearch { id: string; sku: string; results: InventoryResult[]; searchedAt: string; }
+interface CompetitorResult {
+  competitor: string; query: string; title: string | null;
+  price: number | null; currency: string; link: string | null;
+  image: string | null; available: boolean | null;
+  scraped_at: string; error: string | null;
+}
+interface ScanJob {
+  id: string; sku: string; query: string;
+  status: "scanning" | "done" | "error";
+  results: Record<string, CompetitorResult[]>;
+  scannedAt: string;
+}
 
 type ViewType = "landing" | "login" | "register" | "dashboard" | "competitors" | "inventory" | "reports";
 
@@ -63,6 +75,16 @@ export default function Home() {
   }, []);
 
   // Competitors
+
+  // ── Competitor Monitor state ──
+  const [compSku, setCompSku] = useState("");
+  const [compQuery, setCompQuery] = useState("");
+  const [compJobs, setCompJobs] = useState<ScanJob[]>([]);
+  const [compScanning, setCompScanning] = useState(false);
+  const [compError, setCompError] = useState("");
+  const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>(["homecenter", "noon"]);
+  const [compTab, setCompTab] = useState<"scan" | "results">("scan");
+  const [allCompResults, setAllCompResults] = useState<CompetitorResult[]>([]);
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [scrapeLoading, setScrapeLoading] = useState(false);
   const [scrapeError, setScrapeError] = useState("");
@@ -91,38 +113,6 @@ export default function Home() {
 
   // Reports / KPIs
   const [activeKpi, setActiveKpi] = useState<number | null>(null);
-
-  // ERP / Reports state
-  const [erpData, setErpData] = useState<any>(null);
-  const [erpLoading, setErpLoading] = useState(false);
-  const [erpError, setErpError] = useState("");
-  const [timePeriod, setTimePeriod] = useState(0);
-  const [lastFetched, setLastFetched] = useState("");
-
-  const PERIODS = ["today", "week", "month", "quarter", "year"];
-
-  const fetchKpis = async (periodIdx?: number) => {
-    const idx = periodIdx !== undefined ? periodIdx : timePeriod;
-    setErpLoading(true);
-    setErpError("");
-    try {
-      const res = await fetch(`${API_URL}/erpnext-kpis?period=${PERIODS[idx]}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setErpData(json.data ?? json);
-      setLastFetched(new Date().toLocaleTimeString("ar-SA"));
-    } catch (e: unknown) {
-      setErpError(e instanceof Error ? e.message : "فشل الاتصال بـ ERPNext");
-    } finally {
-      setErpLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (view === "reports" && !erpData && !erpLoading) {
-      fetchKpis(0);
-    }
-  }, [view]);
 
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -240,6 +230,37 @@ export default function Home() {
     } catch (e: unknown) { setScrapeError(e instanceof Error ? e.message : "خطأ"); }
     finally { setScrapeLoading(false); setRefreshingId(null); }
   };
+
+  // ── Competitor Monitor functions ──
+  const handleCompetitorScan = async () => {
+    if (!compQuery.trim()) return;
+    setCompScanning(true); setCompError("");
+    const jobId = Math.random().toString(36).slice(2);
+    const sku = compSku.trim() || `q-${Date.now()}`;
+    const newJob: ScanJob = { id: jobId, sku, query: compQuery.trim(), status: "scanning", results: {}, scannedAt: new Date().toLocaleTimeString("ar-SA") };
+    setCompJobs(p => [newJob, ...p]);
+    try {
+      const res = await fetch(`${API_URL}/competitors/scan`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku, query: compQuery.trim(), competitor_keys: selectedCompetitors, background: false, max_results: 5 }),
+      });
+      const data = await res.json();
+      setCompJobs(p => p.map(j => j.id !== jobId ? j : { ...j, status: "done", results: data.results || {} }));
+      setCompQuery(""); setCompSku("");
+    } catch (e: any) {
+      setCompJobs(p => p.map(j => j.id !== jobId ? j : { ...j, status: "error" }));
+      setCompError(e.message || "خطأ في الاتصال بالـ backend");
+    } finally { setCompScanning(false); }
+  };
+
+  const fetchAllCompResults = async () => {
+    try {
+      const res = await fetch(`${API_URL}/competitors/results?limit=100`);
+      const data = await res.json();
+      setAllCompResults(data.results || []);
+    } catch {}
+  };
+
 
   // ── Inventory ──
   const addStore = () => {
@@ -774,58 +795,178 @@ export default function Home() {
     );
   }
 
-  // COMPETITORS VIEW
+  // ══════════════════════════════════════
+  // COMPETITORS VIEW — محدّث مع backend
   // ══════════════════════════════════════
   if (view === "competitors") return (
     <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+      <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
       <div style={{ display: "flex", minHeight: "100vh" }}>
         {sidebarJSX}
-        <div style={{ flex: 1, padding: "40px" }}>
+        <div style={{ flex: 1, padding: "40px", overflowY: "auto" }}>
           <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 6px" }}>مراقبة المنافسين 🔍</h1>
-          <p style={{ color: "#555", fontSize: "13px", margin: "0 0 28px" }}>أضف روابط منتجات المنافسين لتتبع أسعارهم وتوفرهم</p>
-          <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", padding: "24px", marginBottom: "28px" }}>
-            <div style={{ display: "flex", gap: "12px" }}>
-              <input value={scrapeUrl} onChange={e => setScrapeUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && handleScrape(scrapeUrl)} placeholder="https://competitor-store.com/products/sofa"
-                style={{ flex: 1, padding: "12px 16px", background: "#0a0a0f", border: "1px solid #2a2a3e", borderRadius: "10px", color: "#e8e8f0", fontSize: "14px", outline: "none", fontFamily: "inherit", direction: "ltr", textAlign: "left" }} />
-              <button onClick={() => handleScrape(scrapeUrl)} disabled={scrapeLoading || !scrapeUrl.trim()}
-                style={{ background: scrapeLoading ? "#2a2a3e" : "#c8b8ff", color: scrapeLoading ? "#888" : "#0a0a0f", border: "none", borderRadius: "10px", padding: "12px 24px", fontSize: "14px", fontWeight: "700", cursor: scrapeLoading ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
-                {scrapeLoading ? "جاري..." : "جلب البيانات ←"}
+          <p style={{ color: "#555", fontSize: "13px", margin: "0 0 20px" }}>ابحث عن منتجاتك في Homecenter وNoon تلقائياً</p>
+
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: "0", marginBottom: "24px", borderBottom: "1px solid #1e1e2e" }}>
+            {[{ k: "scan", l: "بحث جديد" }, { k: "results", l: "كل النتائج" }].map(tab => (
+              <button key={tab.k} onClick={() => { setCompTab(tab.k as any); if (tab.k === "results") fetchAllCompResults(); }}
+                style={{ padding: "10px 22px", background: "none", border: "none", borderBottom: compTab === tab.k ? "2px solid #c8b8ff" : "2px solid transparent", color: compTab === tab.k ? "#c8b8ff" : "#555", fontSize: "14px", fontWeight: compTab === tab.k ? "700" : "400", cursor: "pointer", fontFamily: "inherit", marginBottom: "-1px" }}>
+                {tab.l}
               </button>
-            </div>
-            {scrapeError && <div style={{ marginTop: "12px", padding: "10px", background: "#1a0a0a", border: "1px solid #3a1a1a", borderRadius: "8px", fontSize: "13px", color: "#ff6b6b" }}>⚠️ {scrapeError}</div>}
+            ))}
           </div>
-          {products.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "80px 0", color: "#333" }}>
-              <div style={{ fontSize: "48px", marginBottom: "16px" }}>🔍</div>
-              <p style={{ fontSize: "15px", margin: 0 }}>أضف رابط منتج لبدء المراقبة</p>
-            </div>
-          ) : (
-            <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "70px 1fr 130px 110px 90px 80px", padding: "12px 20px", borderBottom: "1px solid #1e1e2e", fontSize: "11px", color: "#555", fontWeight: "600" }}>
-                <span>صورة</span><span>المنتج</span><span>السعر</span><span>التوفر</span><span>التحديث</span><span></span>
+
+          {compTab === "scan" && (
+            <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "24px", alignItems: "start" }}>
+
+              {/* ── Left: Config ── */}
+              <div>
+                <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", padding: "20px", marginBottom: "12px" }}>
+                  <p style={{ margin: "0 0 14px", fontSize: "13px", color: "#888", fontWeight: "600" }}>إعدادات البحث</p>
+                  <p style={{ margin: "0 0 5px", fontSize: "12px", color: "#666" }}>SKU المنتج (اختياري)</p>
+                  <input value={compSku} onChange={e => setCompSku(e.target.value)} placeholder="WA-CT-1001"
+                    style={{ ...inputStyle, marginBottom: "12px" }} />
+                  <p style={{ margin: "0 0 5px", fontSize: "12px", color: "#666" }}>اسم المنتج للبحث *</p>
+                  <input value={compQuery} onChange={e => setCompQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && handleCompetitorScan()}
+                    placeholder="مثال: طاولة جانبية رخام ذهبي"
+                    style={{ ...inputStyle, marginBottom: "16px" }} />
+                  <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#666" }}>المنافسين</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }}>
+                    {[{ k: "homecenter", n: "Homecenter" }, { k: "noon", n: "Noon" }].map(c => (
+                      <label key={c.k} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", padding: "8px 10px", background: selectedCompetitors.includes(c.k) ? "#1a1a2e" : "#0a0a0f", border: "1px solid " + (selectedCompetitors.includes(c.k) ? "#2a2a4e" : "#1e1e2e"), borderRadius: "8px" }}>
+                        <input type="checkbox" checked={selectedCompetitors.includes(c.k)}
+                          onChange={e => setSelectedCompetitors(p => e.target.checked ? [...p, c.k] : p.filter(k => k !== c.k))}
+                          style={{ accentColor: "#c8b8ff", cursor: "pointer" }} />
+                        <span style={{ fontSize: "13px", color: selectedCompetitors.includes(c.k) ? "#c8b8ff" : "#666", fontWeight: "500" }}>{c.n}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <button onClick={handleCompetitorScan} disabled={compScanning || !compQuery.trim() || selectedCompetitors.length === 0}
+                    style={{ width: "100%", padding: "12px", background: compScanning || !compQuery.trim() ? "#2a2a3e" : "#c8b8ff", color: compScanning || !compQuery.trim() ? "#888" : "#0a0a0f", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: "700", cursor: compScanning || !compQuery.trim() ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                    {compScanning ? "جاري البحث..." : "ابدأ البحث ←"}
+                  </button>
+                  {compError && <p style={{ margin: "8px 0 0", fontSize: "12px", color: "#ff6b6b" }}>⚠️ {compError}</p>}
+                </div>
+                <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "12px", padding: "14px 16px" }}>
+                  <p style={{ margin: "0 0 10px", fontSize: "12px", color: "#555", fontWeight: "600" }}>المنافسين النشطين</p>
+                  {[{ n: "Homecenter", u: "homecenter.com.sa" }, { n: "Noon", u: "noon.com/saudi-ar" }].map(c => (
+                    <div key={c.n} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0", borderBottom: "1px solid #141420" }}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
+                      <div><div style={{ fontSize: "13px", fontWeight: "500" }}>{c.n}</div><div style={{ fontSize: "11px", color: "#555", direction: "ltr" }}>{c.u}</div></div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              {products.map((p, i) => (
-                <div key={p.id} style={{ display: "grid", gridTemplateColumns: "70px 1fr 130px 110px 90px 80px", padding: "16px 20px", alignItems: "center", borderBottom: i < products.length - 1 ? "1px solid #141420" : "none" }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "10px", background: "#1a1a2e", overflow: "hidden", border: "1px solid #2a2a3e", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {p.image ? <img src={p.image.startsWith("//") ? "https:" + p.image : p.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /> : <span style={{ fontSize: "20px" }}>🪑</span>}
+
+              {/* ── Right: Jobs ── */}
+              <div>
+                {compJobs.length === 0 && (
+                  <div style={{ background: "#111118", border: "1px dashed #2a2a3e", borderRadius: "16px", padding: "60px", textAlign: "center" }}>
+                    <div style={{ fontSize: "40px", marginBottom: "16px" }}>🔍</div>
+                    <p style={{ color: "#555", fontSize: "14px" }}>ابحث عن منتج لمعرفة وجوده عند المنافسين وسعره</p>
                   </div>
-                  <div style={{ paddingRight: "8px" }}>
-                    <div style={{ fontSize: "14px", fontWeight: "500", marginBottom: "4px" }}>{p.name}</div>
-                    <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#555", textDecoration: "none", direction: "ltr", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "280px" }}>{p.url}</a>
+                )}
+                {compJobs.map(job => (
+                  <div key={job.id} style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", marginBottom: "16px", overflow: "hidden" }}>
+                    <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e1e2e", display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: job.status === "scanning" ? "#ffd166" : job.status === "done" ? "#4ade80" : "#ff6b6b" }} />
+                      <span style={{ fontSize: "14px", fontWeight: "700", color: "#c8b8ff" }}>{job.query}</span>
+                      {job.sku && !job.sku.startsWith("q-") && <span style={{ fontSize: "12px", color: "#555", fontFamily: "monospace" }}>{job.sku}</span>}
+                      <span style={{ marginRight: "auto", fontSize: "11px", color: "#555" }}>{job.scannedAt}</span>
+                      <button onClick={() => setCompJobs(p => p.filter(j => j.id !== job.id))} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "13px" }}>✕</button>
+                    </div>
+                    {job.status === "scanning" && (
+                      <div style={{ padding: "24px", textAlign: "center", color: "#555", fontSize: "13px" }}>
+                        <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid #333", borderTopColor: "#c8b8ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", marginLeft: "8px", verticalAlign: "middle" }} />
+                        جاري البحث في المنافسين...
+                      </div>
+                    )}
+                    {job.status === "error" && <div style={{ padding: "16px 20px", color: "#ff6b6b", fontSize: "13px" }}>⚠️ فشل البحث — تحقق من اتصال الـ backend</div>}
+                    {job.status === "done" && Object.entries(job.results).map(([compKey, results]: [string, CompetitorResult[]]) => (
+                      <div key={compKey}>
+                        <div style={{ padding: "10px 20px", background: "#0f0f1a", borderBottom: "1px solid #1e1e2e", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: results.filter(r => !r.error).length > 0 ? "#4ade80" : "#555" }} />
+                          <span style={{ fontSize: "13px", fontWeight: "600" }}>{compKey === "homecenter" ? "Homecenter" : compKey === "noon" ? "Noon" : compKey}</span>
+                          <span style={{ fontSize: "12px", color: "#555" }}>{results.filter(r => !r.error).length} نتيجة</span>
+                        </div>
+                        {results.filter(r => !r.error).length === 0 && <div style={{ padding: "14px 20px", fontSize: "13px", color: "#555" }}>لم يُعثر على المنتج في هذا المتجر</div>}
+                        {results.filter(r => !r.error).map((r, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 20px", borderBottom: "1px solid #141420", background: i % 2 === 0 ? "transparent" : "#0d0d14" }}>
+                            {r.image && <img src={r.image} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                            <div style={{ flex: 1, overflow: "hidden" }}>
+                              <div style={{ fontSize: "13px", fontWeight: "500", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title || "—"}</div>
+                            </div>
+                            <div style={{ textAlign: "left", flexShrink: 0 }}>
+                              <div style={{ fontSize: "15px", fontWeight: "700", color: "#c8b8ff" }}>{r.price ? `${r.price.toLocaleString()} ${r.currency}` : "—"}</div>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "2px 8px", borderRadius: "20px", fontSize: "11px", marginTop: "4px", background: r.available === true ? "#0d1f0d" : r.available === false ? "#1f0d0d" : "#1a1a2e", color: r.available === true ? "#4ade80" : r.available === false ? "#f87171" : "#555" }}>
+                                <span style={{ width: 4, height: 4, borderRadius: "50%", background: "currentColor" }} />
+                                {r.available === true ? "متوفر" : r.available === false ? "غير متوفر" : "غير محدد"}
+                              </span>
+                            </div>
+                            {r.link && <a href={r.link} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 12px", background: "#1a1a2e", border: "1px solid #2a2a4e", borderRadius: "8px", color: "#c8b8ff", fontSize: "12px", textDecoration: "none", flexShrink: 0 }}>فتح ↗</a>}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ fontSize: "15px", fontWeight: "700", color: "#c8b8ff" }}>{p.price}</div>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", background: p.available ? "#0d1f0d" : "#1f0d0d", color: p.available ? "#4ade80" : "#f87171", border: "1px solid " + (p.available ? "#1a3a1a" : "#3a1a1a") }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.available ? "#4ade80" : "#f87171" }} />
-                    {p.available ? "متوفر" : "غير متوفر"}
-                  </span>
-                  <div style={{ fontSize: "12px", color: "#555" }}>{p.scrapedAt}</div>
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <button onClick={() => handleScrape(p.url, p.id)} disabled={refreshingId === p.id} style={{ background: "none", border: "1px solid #2a2a3e", borderRadius: "8px", width: 30, height: 30, cursor: "pointer", color: "#888", fontSize: "14px" }}>↻</button>
-                    <button onClick={() => setProducts(p2 => p2.filter(x => x.id !== p.id))} style={{ background: "none", border: "1px solid #2a2a3e", borderRadius: "8px", width: 30, height: 30, cursor: "pointer", color: "#555", fontSize: "12px" }}>✕</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {compTab === "results" && (
+            <div>
+              <div style={{ marginBottom: "16px", display: "flex", justifyContent: "flex-end" }}>
+                <button onClick={fetchAllCompResults} style={{ padding: "8px 16px", background: "#1a1a2e", border: "1px solid #2a2a4e", borderRadius: "8px", color: "#c8b8ff", fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>تحديث ↻</button>
+              </div>
+              {allCompResults.length === 0 ? (
+                <div style={{ background: "#111118", border: "1px dashed #2a2a3e", borderRadius: "16px", padding: "60px", textAlign: "center" }}>
+                  <p style={{ color: "#555", fontSize: "14px" }}>لا توجد نتائج محفوظة بعد — ابدأ بحثاً أولاً</p>
+                </div>
+              ) : (
+                <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", overflow: "hidden" }}>
+                  <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e1e2e", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: "700" }}>كل النتائج</span>
+                    <span style={{ fontSize: "12px", color: "#555" }}>{allCompResults.length} سجل</span>
+                    <button onClick={() => {
+                      const XLSX = (window as any).XLSX;
+                      const ws = XLSX.utils.json_to_sheet(allCompResults.map(r => ({ "SKU/البحث": r.query, "المنافس": r.competitor, "الاسم": r.title, "السعر": r.price, "العملة": r.currency, "متوفر": r.available ? "نعم" : "لا", "الرابط": r.link, "وقت الفحص": r.scraped_at })));
+                      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "المنافسين");
+                      XLSX.writeFile(wb, "مراقبة_المنافسين.xlsx");
+                    }} style={{ marginRight: "auto", padding: "6px 14px", background: "#1a1a2e", border: "1px solid #2a2a4e", borderRadius: "8px", color: "#c8b8ff", fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>
+                      تصدير Excel ↓
+                    </button>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "700px" }}>
+                      <thead><tr style={{ background: "#0a0a0f" }}>
+                        {["البحث / SKU", "المنافس", "الاسم عندهم", "السعر", "التوفر", "تاريخ الفحص", ""].map(h => (
+                          <th key={h} style={{ padding: "9px 14px", textAlign: "right", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e" }}>{h}</th>
+                        ))}
+                      </tr></thead>
+                      <tbody>
+                        {allCompResults.map((r, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid #141420", background: i % 2 === 0 ? "transparent" : "#0d0d14" }}>
+                            <td style={{ padding: "10px 14px", color: "#c8b8ff", fontSize: "12px", fontFamily: "monospace" }}>{r.query}</td>
+                            <td style={{ padding: "10px 14px", color: "#888", fontSize: "12px" }}>{r.competitor}</td>
+                            <td style={{ padding: "10px 14px", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title || "—"}</td>
+                            <td style={{ padding: "10px 14px", color: "#c8b8ff", fontWeight: "600" }}>{r.price ? `${r.price.toLocaleString()} ${r.currency}` : "—"}</td>
+                            <td style={{ padding: "10px 14px" }}>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "2px 8px", borderRadius: "20px", fontSize: "11px", background: r.available === true ? "#0d1f0d" : r.available === false ? "#1f0d0d" : "#1a1a2e", color: r.available === true ? "#4ade80" : r.available === false ? "#f87171" : "#555" }}>
+                                {r.available === true ? "متوفر" : r.available === false ? "غير متوفر" : "—"}
+                              </span>
+                            </td>
+                            <td style={{ padding: "10px 14px", color: "#555", fontSize: "11px" }}>{r.scraped_at ? new Date(r.scraped_at).toLocaleDateString("ar-SA") : "—"}</td>
+                            <td style={{ padding: "10px 14px" }}>{r.link && <a href={r.link} target="_blank" rel="noopener noreferrer" style={{ color: "#7c6af7", fontSize: "12px" }}>↗</a>}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>

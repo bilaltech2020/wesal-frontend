@@ -65,10 +65,7 @@ export default function Home() {
   }, []);
 
   // ── Competitor Monitor v2 state ──
-  const [compSites, setCompSites] = useState<{id:string;name:string;url:string}[]>([
-    { id:"hc", name:"Homecenter", url:"https://www.homecenter.com.sa" },
-    { id:"noon", name:"Noon", url:"https://www.noon.com/saudi-ar" },
-  ]);
+  const [compSites, setCompSites] = useState<{id:string;name:string;url:string}[]>([]);
   const [compNewSiteName, setCompNewSiteName] = useState("");
   const [compNewSiteUrl, setCompNewSiteUrl] = useState("");
   const [compRows, setCompRows] = useState<CompRow[]>([{ id: "1", sku: "", query: "", status: "idle", results: [] }]);
@@ -261,7 +258,10 @@ export default function Home() {
       } else {
         // بدون موقع مخصص → ابحث في كل المواقع المضافة
         siteKeys = compSites.map(s => s.id);
-        if (siteKeys.length === 0) siteKeys = ["homecenter", "noon"];
+        if (siteKeys.length === 0) {
+          setCompRows(p => p.map(r => r.id === id ? {...r, status: "done", results: [{ competitor: "—", title: null, price: null, currency: "SAR", link: null, available: null, error: "أدخل موقعاً في خانة الموقع" }]} : r));
+          return;
+        }
       }
 
       const res = await fetch(`${API_URL}/competitors/scan`, {
@@ -295,7 +295,6 @@ export default function Home() {
   };
 
   const compSearchAll = async () => {
-    if (compSites.length === 0) return;
     setCompSearching(true);
     for (const row of compRows.filter(r => r.query.trim())) await compSearchRow(row.id);
     setCompSearching(false);

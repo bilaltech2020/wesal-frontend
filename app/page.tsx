@@ -239,18 +239,49 @@ export default function Home() {
 
   const compSearchRow = async (id: string) => {
     const row = compRows.find(r => r.id === id);
-    if (!row || !row.query.trim() || compSites.length === 0) return;
+    if (!row || !row.query.trim()) return;
     setCompRows(p => p.map(r => r.id === id ? {...r, status: "searching", results: []} : r));
     try {
-      const siteKeys = compSites.map(s => s.id);
+      const rowSite = (row as any).site?.trim();
+
+      // إذا في موقع مخصص في الصف — أضفه في backend أولاً ثم ابحث فيه
+      let siteKeys: string[];
+      if (rowSite) {
+        const rawUrl  = rowSite.startsWith("http") ? rowSite : "https://" + rowSite;
+        const domain  = rawUrl.replace("https://","").replace("http://","").replace("www.","").split("/")[0];
+        const key     = domain.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+        // أضف في backend إذا مو موجود
+        try {
+          await fetch(`${API_URL}/competitors/add`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key, name: domain, url: rawUrl }),
+          });
+        } catch {}
+        siteKeys = [key];
+      } else {
+        // بدون موقع مخصص → ابحث في كل المواقع المضافة
+        siteKeys = compSites.map(s => s.id);
+        if (siteKeys.length === 0) siteKeys = ["homecenter", "noon"];
+      }
+
       const res = await fetch(`${API_URL}/competitors/scan`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku: row.sku || row.query, query: row.query, competitor_keys: siteKeys, background: false, max_results: 3, fetch_details: true })
+        body: JSON.stringify({
+          sku:             row.sku || row.query,
+          query:           row.query,
+          competitor_keys: siteKeys,
+          background:      false,
+          max_results:     3,
+          fetch_details:   true,
+        })
       });
       const data = await res.json();
       const flat: CompResult[] = [];
+      const displayName = rowSite
+        ? rowSite.replace("https://","").replace("http://","").replace("www.","").split("/")[0]
+        : "";
       Object.entries(data.results || {}).forEach(([comp, items]: [string, any[]]) => {
-        const siteName = compSites.find(s => s.id === comp)?.name || comp;
+        const siteName = displayName || compSites.find(s => s.id === comp)?.name || comp;
         if (!items || items.length === 0) {
           flat.push({ competitor: siteName, title: null, price: null, currency: "SAR", link: null, available: null, error: "لم يُعثر على المنتج" });
         } else {

@@ -220,10 +220,6 @@ export default function Home() {
     finally { setAuthLoading(false); }
   };
 
-  // ── Competitors ──
-  const handleScrape = async (targetUrl: string, existingId?: string) => {
-    if (!targetUrl.trim()) return;
-
   // ── Competitor Monitor v2 functions ──
   const compAddSite = async () => {
     if (!compNewSiteName.trim() || !compNewSiteUrl.trim()) return;

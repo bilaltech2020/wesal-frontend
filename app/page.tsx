@@ -1,1216 +1,693 @@
-// @ts-nocheck
-"use client";
-import { useState, useEffect, useRef } from "react";
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import psycopg2
+import bcrypt
+import uuid
+from datetime import datetime, timedelta
+from jose import jwt
+import httpx
+from bs4 import BeautifulSoup
+import re
+import base64
+import json
+from erpnext_integration import get_all_kpis
 
-function loadXLSX(): Promise<void> {
-  return new Promise((resolve) => {
-    if ((window as any).XLSX) { resolve(); return; }
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    s.onload = () => resolve();
-    document.head.appendChild(s);
-  });
-}
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-const API_URL = "https://wesal-backend-production.up.railway.app";
+DB_URL = "postgresql://postgres:QVZuuAXOAZCEYYriLVPrfSmrWboOQFEM@maglev.proxy.rlwy.net:12519/railway"
+SECRET = "wesal-secret-2025"
+SERP_KEY = "1fc45735ba2ed26629fbe15e19d6a201f8e66852356fe8a6ea79daf20e221b38"
+BROWSERLESS_TOKEN = "2UK6UHAHXQtJ1Nqd90153b8fcd33e5f5110456a7b7406f6b5"
+OXYLABS_USER = "wesal_REULB"
+OXYLABS_PASS = "Sad123123123+"
 
-interface ScrapedProduct {
-  id: string; url: string; name: string; price: string; image: string; available: boolean; scrapedAt: string;
-}
-interface Store { id: string; name: string; url: string; urlTemplate: string; }
-interface ProductResult {
-  name: string; url: string; price: string; available: boolean; snippet: string;
-}
-interface InventoryResult {
-  storeId: string; storeName: string; count: number; products: ProductResult[]; status: "loading" | "done" | "error"; error?: string;
-}
-interface InventorySearch { id: string; sku: string; results: InventoryResult[]; searchedAt: string; }
-interface CompRow { id: string; sku: string; query: string; status: "idle"|"searching"|"done"|"error"; results: CompResult[]; }
-interface CompResult { competitor: string; title: string|null; price: number|null; currency: string; link: string|null; available: boolean|null; error: string|null; }
+def get_db():
+    return psycopg2.connect(DB_URL)
 
-type ViewType = "landing" | "login" | "register" | "dashboard" | "competitors" | "inventory" | "reports";
+def fetch_with_browserless(url: str) -> str:
+    """يجلب HTML الصفحة عبر Browserless — Playwright في السحابة"""
+    script = f"""
+export default async function ({{ page }}) {{
+  await page.goto('{url}', {{ waitUntil: 'networkidle', timeout: 30000 }});
+  await page.waitForTimeout(2000);
+  return {{ data: await page.content(), type: 'html' }};
+}}
+"""
+    res = httpx.post(
+        f"https://production-sfo.browserless.io/function?token={BROWSERLESS_TOKEN}",
+        content=script,
+        headers={"Content-Type": "application/javascript"},
+        timeout=60,
+    )
+    if res.status_code != 200:
+        raise Exception(f"Browserless HTTP {res.status_code}: {res.text[:300]}")
+    data = res.json()
+    return data.get("data", "")
 
-const NAV = [
-  { icon: "⬡", label: "لوحة التحكم", v: "dashboard" },
-  { icon: "🔍", label: "مراقبة المنافسين", v: "competitors" },
-  { icon: "📦", label: "مراقبة المخزون", v: "inventory" },
-  { icon: "◈", label: "التكاملات", v: "dashboard" },
-  { icon: "◇", label: "التقارير", v: "reports" },
-  { icon: "○", label: "الإعدادات", v: "dashboard" },
-];
+def fetch_with_oxylabs(url: str) -> str:
+    """Oxylabs كـ fallback"""
+    payload = {"source": "universal", "url": url}
+    creds = base64.b64encode(f"{OXYLABS_USER}:{OXYLABS_PASS}".encode()).decode()
+    res = httpx.post(
+        "https://realtime.oxylabs.io/v1/queries",
+        headers={"Authorization": f"Basic {creds}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=60,
+    )
+    if res.status_code != 200:
+        raise Exception(f"Oxylabs HTTP {res.status_code}")
+    data = res.json()
+    if "results" in data and data["results"]:
+        return data["results"][0].get("content", "")
+    raise Exception("No results from Oxylabs")
 
-const inputStyle: React.CSSProperties = {
-  width: "100%", padding: "10px 14px", background: "#0a0a0f",
-  border: "1px solid #2a2a3e", borderRadius: "8px", color: "#e8e8f0",
-  fontSize: "13px", outline: "none", fontFamily: "inherit", boxSizing: "border-box",
-};
+def smart_fetch(url: str) -> str:
+    """يجرب Browserless أولاً، بعدين Oxylabs كـ fallback"""
+    try:
+        html = fetch_with_browserless(url)
+        if html and len(html) > 500:
+            return html
+    except Exception as e:
+        print(f"Browserless failed: {e}")
+    return fetch_with_oxylabs(url)
 
-export default function Home() {
-  const [view, setView] = useState<ViewType>("landing");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [authError, setAuthError] = useState("");
-  const [authLoading, setAuthLoading] = useState(false);
-  const [user, setUser] = useState<{ email: string; company: string } | null>(null);
+def parse_product(html: str, url: str) -> dict:
+    soup = BeautifulSoup(html, "html.parser")
 
-  useEffect(() => {
-    loadXLSX();
-    const token = localStorage.getItem("wesal_token");
-    const savedUser = localStorage.getItem("wesal_user");
-    if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
-      setView("dashboard");
-    }
-  }, []);
+    # اسم المنتج من og:title
+    name = ""
+    og_title = soup.find("meta", property="og:title")
+    if og_title:
+        t = og_title.get("content", "").strip()
+        if "|" in t:
+            t = t.split("|")[0].strip()
+        if len(t) > 5:
+            name = t
 
-  // ── Competitor Monitor v2 state ──
-  const [compSites, setCompSites] = useState<{id:string;name:string;url:string}[]>([]);
-  const [compNewSiteName, setCompNewSiteName] = useState("");
-  const [compNewSiteUrl, setCompNewSiteUrl] = useState("");
-  const [compRows, setCompRows] = useState<CompRow[]>([{ id: "1", sku: "", query: "", status: "idle", results: [] }]);
-  const [compExcelFile, setCompExcelFile] = useState("");
-  const [compExcelRows, setCompExcelRows] = useState<Record<string,string>[]>([]);
-  const [compExcelCols, setCompExcelCols] = useState<string[]>([]);
-  const [compSkuCol, setCompSkuCol] = useState("");
-  const [compNameCol, setCompNameCol] = useState("");
-  const [compSearching, setCompSearching] = useState(false);
-  const [compTab, setCompTab] = useState<"manual"|"excel"|"results">("manual");
-  const compExcelRef = useRef<HTMLInputElement>(null);
+    if not name:
+        for sel in ["h1", "[class*='product-name']", "[class*='ProductName']", ".product__title"]:
+            el = soup.select_one(sel)
+            if el:
+                t = el.get_text(strip=True)
+                if len(t) > 5:
+                    name = t
+                    break
 
+    # السعر — نبحث بشكل أوسع
+    price = ""
+    # من og:description
+    og_desc = soup.find("meta", property="og:description")
+    if og_desc:
+        desc = og_desc.get("content", "")
+        match = re.search(r"([\d,\.]+)\s*(ر\.س|SAR|﷼)", desc)
+        if match:
+            price = match.group(0)
 
-  const [scrapeUrl, setScrapeUrl] = useState("");
-  const [scrapeLoading, setScrapeLoading] = useState(false);
-  const [scrapeError, setScrapeError] = useState("");
-  const [products, setProducts] = useState<ScrapedProduct[]>([]);
-  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+    # من JSON-LD
+    if not price:
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(script.string or "")
+                if isinstance(data, dict):
+                    offers = data.get("offers", {})
+                    if isinstance(offers, dict):
+                        p = offers.get("price", "")
+                        currency = offers.get("priceCurrency", "")
+                        if p:
+                            price = f"{p} {currency}".strip()
+                            break
+            except:
+                pass
 
-  // Inventory
-  const [storeName, setStoreName] = useState("");
-  const [storeUrl, setStoreUrl] = useState("");
-  const [storeTemplate, setStoreTemplate] = useState("");
-  const [stores, setStores] = useState<Store[]>([]);
-  const [skuInput, setSkuInput] = useState("");
-  const [searches, setSearches] = useState<InventorySearch[]>([]);
-  const [searching, setSearching] = useState(false);
+    # من selectors
+    if not price:
+        for sel in ["[class*='price']", "[class*='Price']", ".money", "[data-price]", "[itemprop='price']"]:
+            el = soup.select_one(sel)
+            if el:
+                t = el.get_text(strip=True)
+                if any(c.isdigit() for c in t) and len(t) < 50:
+                    price = t
+                    break
 
-  // Excel upload
-  const [excelRows, setExcelRows] = useState<Record<string, string>[]>([]);
-  const [excelCols, setExcelCols] = useState<string[]>([]);
-  const [searchCol, setSearchCol] = useState("");
-  const [nameCol, setNameCol] = useState("");
-  const [excelSearching, setExcelSearching] = useState(false);
-  const [excelResults, setExcelResults] = useState<{sku:string; productName:string; storeName:string; price:string; url:string; found:boolean}[]>([]);
-  const [excelFileName, setExcelFileName] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [urlCol, setUrlCol] = useState("");
+    # الصورة
+    img = ""
+    og_img = soup.find("meta", property="og:image")
+    if og_img:
+        img = og_img.get("content", "")
 
-  // Reports / KPIs
-  const [activeKpi, setActiveKpi] = useState<number | null>(null);
+    return {"name": name, "price": price, "image": img, "url": url}
 
-  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setExcelFileName(file.name);
-    await loadXLSX();
-    const XLSX = (window as any).XLSX;
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
-    if (rows.length > 0) {
-      const cols = Object.keys(rows[0]);
-      setExcelCols(cols);
-      setSearchCol(cols[0]);
-      setNameCol(cols[0]);
-      // Auto-detect URL column
-      const urlColCandidate = cols.find(c => c.toLowerCase().includes("url") || c.toLowerCase().includes("link"));
-      setUrlCol(urlColCandidate || "");
-      setExcelRows(rows);
-    }
-  };
+def parse_search_results(html: str, base_url: str) -> list:
+    soup = BeautifulSoup(html, "html.parser")
+    from urllib.parse import urlparse
+    parsed = urlparse(base_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    selectors = ["[class*='product-card']", "[class*='ProductCard']", "[class*='product-item']", "[class*='ProductItem']", "[class*='product-tile']", "li[class*='product']"]
+    cards = []
+    for sel in selectors:
+        cards = soup.select(sel)
+        if cards:
+            break
+    results = []
+    for card in cards[:10]:
+        name = ""
+        for ns in ["h2", "h3", "h4", "[class*='name']", "[class*='title']"]:
+            el = card.select_one(ns)
+            if el:
+                t = el.get_text(strip=True)
+                if len(t) > 3:
+                    name = t
+                    break
+        price = ""
+        for ps in ["[class*='price']", "[class*='Price']"]:
+            el = card.select_one(ps)
+            if el:
+                t = el.get_text(strip=True)
+                if any(c.isdigit() for c in t):
+                    price = t
+                    break
+        link = ""
+        a = card.select_one("a[href]")
+        if a:
+            href = a.get("href", "")
+            link = href if href.startswith("http") else base + href
+        if name:
+            results.append({"name": name, "price": price, "url": link, "available": True})
+    return results
 
-  const handleExcelSearch = async () => {
-    if (!searchCol || excelRows.length === 0 || stores.length === 0) return;
-    setExcelSearching(true);
-    setExcelResults([]);
-    const allResults: {sku:string; productName:string; storeName:string; price:string; url:string; found:boolean}[] = [];
-    for (const row of excelRows.slice(0, 50)) {
-      const sku = String(row[searchCol] || "").trim();
-      const productName = String(row[nameCol] || sku).trim();
-      if (!sku) continue;
-      let found = false;
-      // إذا عندنا عمود URL، نستخدمه مباشرة بدون المتاجر
-      const directUrl = urlCol ? String(row[urlCol] || "").trim() : "";
-      if (directUrl && directUrl.startsWith("http")) {
-        try {
-          const res = await fetch(`${API_URL}/scrape-dynamic`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: directUrl }) });
-          const data = await res.json();
-          if (data.name && data.name !== "0") {
-            allResults.push({ sku, productName, storeName: "مباشر", price: data.price || "—", url: directUrl, found: true });
-            found = true;
-          }
-        } catch {}
-      } else {
-        for (const store of stores) {
-          try {
-            let fetchUrl: string;
-            if (store.urlTemplate && store.urlTemplate.includes("{SKU}")) {
-              fetchUrl = store.urlTemplate.replace("{SKU}", encodeURIComponent(sku));
-            } else {
-              fetchUrl = `${store.url.replace(/\/+$/, "")}/search?q=${encodeURIComponent(sku)}`;
+class RegisterData(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class LoginData(BaseModel):
+    email: str
+    password: str
+
+class ScrapeData(BaseModel):
+    url: str
+
+class SearchData(BaseModel):
+    sku: str
+    site: str
+
+@app.get("/")
+def root():
+    return {"status": "Wesal API running", "version": "1.0"}
+
+@app.get("/health")
+def health():
+    try:
+        conn = get_db()
+        conn.close()
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/debug-browserless")
+def debug_browserless():
+    try:
+        url = "https://www.homecentre.com/sa/ar/p/167259223"
+        html = smart_fetch(url)
+        result = parse_product(html, url)
+        return {"status": "ok", "name": result["name"], "price": result["price"], "image": result["image"], "html_length": len(html)}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/register")
+def register(data: RegisterData):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        password_hash = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
+        tenant_id = str(uuid.uuid4())
+        user_id = str(uuid.uuid4())
+        cur.execute("INSERT INTO tenants (id, name, email) VALUES (%s, %s, %s)", (tenant_id, data.name, data.email))
+        cur.execute("INSERT INTO users (id, tenant_id, email, password_hash) VALUES (%s, %s, %s, %s)", (user_id, tenant_id, data.email, password_hash))
+        conn.commit()
+        return {"message": "تم التسجيل بنجاح", "tenant_id": tenant_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/login")
+def login(data: LoginData):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, tenant_id, password_hash FROM users WHERE email = %s", (data.email,))
+        user = cur.fetchone()
+        if not user:
+            raise HTTPException(status_code=401, detail="بيانات خاطئة")
+        if not bcrypt.checkpw(data.password.encode(), user[2].encode()):
+            raise HTTPException(status_code=401, detail="بيانات خاطئة")
+        token = jwt.encode(
+            {"user_id": user[0], "tenant_id": user[1], "exp": datetime.utcnow() + timedelta(minutes=1440)},
+            SECRET, algorithm="HS256"
+        )
+        return {"token": token, "tenant_id": user[1]}
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/scrape")
+def scrape_product(data: ScrapeData):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        response = httpx.get(data.url, headers=headers, timeout=15, follow_redirects=True)
+        result = parse_product(response.text, data.url)
+        result["status"] = "success"
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/scrape-dynamic")
+def scrape_dynamic(data: ScrapeData):
+    try:
+        html = smart_fetch(data.url)
+        result = parse_product(html, data.url)
+        if result["name"] and len(result["name"]) > 5:
+            return {
+                "url": data.url,
+                "name": result["name"],
+                "price": result["price"],
+                "image": result["image"],
+                "count": 1,
+                "results": [{"name": result["name"], "price": result["price"], "url": data.url, "available": True}],
+                "status": "success"
             }
-            const res2 = await fetch(`${API_URL}/scrape-dynamic`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: fetchUrl }) });
-            const data2 = await res2.json();
-            if (data2.name && data2.name !== "0") {
-              allResults.push({ sku, productName, storeName: store.name, price: data2.price || "—", url: fetchUrl, found: true });
-              found = true;
-            } else if (data2.results && data2.results.length > 0) {
-              data2.results.slice(0, 2).forEach((p: any) => {
-                allResults.push({ sku, productName, storeName: store.name, price: p.price || "—", url: p.url || fetchUrl, found: true });
-              });
-              found = true;
-            }
-          } catch {}
+        results = parse_search_results(html, data.url)
+        return {
+            "url": data.url,
+            "name": results[0]["name"] if results else "",
+            "price": results[0]["price"] if results else "",
+            "count": len(results),
+            "results": results,
+            "status": "success"
         }
-      }
-      if (!found) allResults.push({ sku, productName, storeName: "—", price: "—", url: "", found: false });
-      setExcelResults([...allResults]);
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/search-product")
+def search_product(data: SearchData):
+    try:
+        site = data.site.replace("https://", "").replace("http://", "").rstrip("/")
+        query = f"site:{site} {data.sku}"
+        serp_res = httpx.get("https://serpapi.com/search", params={"q": query, "api_key": SERP_KEY, "num": 10, "hl": "ar", "gl": "sa"}, timeout=20)
+        serp_data = serp_res.json()
+        results = []
+        for item in serp_data.get("organic_results", []):
+            title = item.get("title", "")
+            link = item.get("link", "")
+            snippet = item.get("snippet", "")
+            price = ""
+            match = re.search(r"[\d,\.]+\s*(ر\.س|SAR|﷼)", snippet)
+            if match:
+                price = match.group(0)
+            results.append({"name": title, "url": link, "price": price, "snippet": snippet, "available": True})
+        return {"sku": data.sku, "site": site, "count": len(results), "results": results}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+@app.get("/erpnext-kpis")
+async def erpnext_kpis():
+    try:
+        data = await get_all_kpis()
+        return {"status": "ok", "data": data, "fetched_at": datetime.now().isoformat()}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "data": {}}
+
+
+# ══════════════════════════════════════════════════════════════
+# COMPETITOR MONITOR v2 — SerpAPI + Product Detail + URL-based
+# ══════════════════════════════════════════════════════════════
+
+from typing import Optional, List
+from urllib.parse import urlparse
+
+# ── In-memory competitors config ─────────────────────────────
+# فارغ — كل المواقع تُضاف من الـ frontend عبر /competitors/add
+COMPETITORS_CONFIG: dict = {}
+
+_competitor_results: list = []
+
+# ── Category page patterns — نتجاهلها ────────────────────────
+CATEGORY_PATTERNS = [
+    "/category/", "/categories/", "/collections/", "/browse/",
+    "/shop/", "/dept/", "/c/", "/cat/", "/taxonomy/",
+    "?cat=", "?category=", "/search?", "/search/",
+    "/tag/", "/brand/", "/brands/",
+]
+
+PRODUCT_HINTS = [
+    "/product/", "/products/", "/p/", "/item/", "/items/",
+    "/pd/", "/dp/", "-p-", "_p_", "/pr/",
+    # Shopify / WooCommerce
+    "/collections/", 
+    # أوتاث وشبيهاتها
+    "/shop/", "/store/",
+]
+
+# صفحات محتوى نتجاهلها
+CONTENT_PATTERNS = [
+    "/blog/", "/news/", "/article/", "/post/", "/about/",
+    "/contact/", "/faq/", "/help/", "/support/", "/policy/",
+    "/terms/", "/privacy/", "/career/", "/jobs/", "/press/",
+    "/guide/", "/tips/", "/how-to/", "/learn/", "/inspiration/",
+    "/قواعد", "/نصائح", "/مقال", "/افكار", "/أفكار", "/تصاميم",
+]
+
+def _is_product_page(url: str) -> bool:
+    """يتحقق إن الرابط صفحة منتج فعلية."""
+    url_lower = url.lower()
+    path = urlparse(url).path.lower()
+
+    # استثنِ category + search pages
+    for pat in CATEGORY_PATTERNS:
+        if pat in url_lower:
+            return False
+
+    # استثنِ صفحات المحتوى/المقالات
+    for pat in CONTENT_PATTERNS:
+        if pat in url_lower:
+            return False
+
+    # علامات واضحة لصفحة منتج
+    for hint in PRODUCT_HINTS:
+        if hint in url_lower:
+            return True
+
+    # Shopify product URLs: /collections/X/products/Y
+    if "/collections/" in path and "/products/" in path:
+        return True
+
+    # URLs with numeric ID at end (common for product pages)
+    import re
+    if re.search(r'/\d{4,}/?$', path):
+        return True
+
+    # رابط طويل بدون كلمات محتوى = احتمال منتج
+    segments = [s for s in path.split("/") if s and len(s) > 3]
+    return len(segments) >= 2
+
+
+# ── Schemas ──────────────────────────────────────────────────
+class CompetitorScanRequest(BaseModel):
+    sku: str
+    query: str
+    competitor_keys: Optional[List[str]] = None
+    background: bool = False
+    max_results: int = 10   # 0 = كل النتائج الممكنة
+    fetch_details: bool = False  # True = أبطأ لكن أسعار أدق
+
+class AddCompetitorRequest(BaseModel):
+    key: str
+    name: str
+    url: str  # مثال: https://www.otath.com أو otath.com
+
+
+# ── Price helpers ─────────────────────────────────────────────
+def _extract_price_from_snippet(text: str) -> Optional[float]:
+    """
+    يستخرج السعر فقط إذا كان مصحوباً بعملة أو كلمة سعر.
+    يتجنب الأرقام العشوائية كأرقام التليفون أو IDs.
+    """
+    if not text:
+        return None
+    # أولاً: سعر + عملة صريحة
+    patterns_with_currency = [
+        r"([\d,]+(?:\.\d+)?)\s*(?:ر\.س|SAR|﷼|SR|ريال)",
+        r"(?:SAR|ر\.س|﷼)\s*([\d,]+(?:\.\d+)?)",
+        r"(?:price|سعر|بـ|بسعر|يبدأ من|من)[:\s]*([\d,]+(?:\.\d+)?)",
+    ]
+    for pat in patterns_with_currency:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            val = _extract_price_float(m.group(1))
+            # تحقق إن السعر منطقي (بين 1 و 999999)
+            if val and 1 <= val <= 999999:
+                return val
+    return None
+
+def _extract_price_float(price_str: str) -> Optional[float]:
+    if not price_str:
+        return None
+    digits = re.sub(r"[^\d.]", "", str(price_str).replace(",", ""))
+    try:
+        return float(digits) if digits else None
+    except ValueError:
+        return None
+
+
+# ── Fetch product page details ────────────────────────────────
+def _fetch_product_details(url: str) -> dict:
+    """
+    يفتح صفحة المنتج ويجيب السعر الحقيقي والاسم الدقيق.
+    يستخدم Browserless → Oxylabs كـ fallback.
+    """
+    try:
+        html = smart_fetch(url)
+        product = parse_product(html, url)
+        price = _extract_price_float(product.get("price", ""))
+        return {
+            "title":     product.get("name") or None,
+            "price":     price,
+            "image":     product.get("image") or None,
+            "available": True if price else None,
+        }
+    except Exception as e:
+        return {"title": None, "price": None, "image": None, "available": None}
+
+
+# ── Core SerpAPI search with full pagination ──────────────────
+
+def _fetch_serp_page(domain_clean: str, query: str, start: int = 0, num: int = 10) -> list:
+    """يجيب صفحة واحدة من SerpAPI."""
+    try:
+        r = httpx.get(
+            "https://serpapi.com/search",
+            params={
+                "q":        f"site:{domain_clean} {query}",
+                "api_key":  SERP_KEY,
+                "num":      num,
+                "start":    start,
+                "hl":       "ar",
+                "gl":       "sa",
+                "no_cache": "true",
+            },
+            timeout=25,
+        )
+        return r.json().get("organic_results", [])
+    except Exception:
+        return []
+
+
+def _parse_serp_item(item: dict, competitor_key: str, query: str, fetch_details: bool) -> dict:
+    """يحول نتيجة SerpAPI واحدة لـ result dict."""
+    link    = item.get("link", "")
+    title   = item.get("title", "")
+    snippet = item.get("snippet", "")
+
+    # نظف title من اسم الموقع
+    for sep in [" - ", " | ", " – ", " — ", " : "]:
+        if sep in title:
+            parts = title.split(sep)
+            title = max(parts, key=len).strip()
+            break
+
+    price     = _extract_price_from_snippet(snippet) or _extract_price_from_snippet(title)
+    combined  = (snippet + " " + title).lower()
+    available = (
+        False if any(w in combined for w in ["out of stock", "نفذ", "غير متوفر", "unavailable"])
+        else True if price
+        else None
+    )
+    image = item.get("thumbnail")
+
+    if fetch_details and link:
+        details = _fetch_product_details(link)
+        if details.get("price"):
+            price = details["price"]
+        if details.get("title") and len(str(details["title"])) > len(title):
+            title = details["title"]
+        if details.get("image"):
+            image = details["image"]
+        if details.get("available") is not None:
+            available = details["available"]
+
+    return {
+        "competitor": competitor_key,
+        "query":      query,
+        "title":      title or None,
+        "price":      price,
+        "currency":   "SAR",
+        "link":       link,
+        "image":      image,
+        "available":  available,
+        "scraped_at": datetime.utcnow().isoformat(),
+        "error":      None,
     }
-    setExcelSearching(false);
-  };
 
-  // ── Auth ──
-  const handleLogin = async () => {
-    setAuthLoading(true); setAuthError("");
-    try {
-      const res = await fetch(`${API_URL}/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(Array.isArray(data.detail) ? data.detail[0]?.msg : data.detail || "خطأ");
-      const u = { email, company: email.split("@")[0] };
-      localStorage.setItem("wesal_token", data.token);
-      localStorage.setItem("wesal_user", JSON.stringify(u));
-      setUser(u); setView("dashboard");
-    } catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "حدث خطأ"); }
-    finally { setAuthLoading(false); }
-  };
 
-  const handleRegister = async () => {
-    setAuthLoading(true); setAuthError("");
-    try {
-      const res = await fetch(`${API_URL}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, name: companyName }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(Array.isArray(data.detail) ? data.detail[0]?.msg : data.detail || "خطأ");
-      const u = { email, company: companyName };
-      localStorage.setItem("wesal_token", data.token);
-      localStorage.setItem("wesal_user", JSON.stringify(u));
-      setUser(u); setView("dashboard");
-    } catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "حدث خطأ"); }
-    finally { setAuthLoading(false); }
-  };
+def _search_one_competitor(
+    competitor_key: str,
+    query: str,
+    max_results: int = 10,
+    fetch_details: bool = False,
+) -> list:
+    """
+    يبحث في موقع منافس عبر SerpAPI مع pagination.
+    max_results=0  → يجيب كل النتائج الممكنة (حتى 100 نتيجة)
+    fetch_details  → يفتح كل صفحة منتج للسعر الحقيقي (أبطأ)
+    """
+    cfg = COMPETITORS_CONFIG.get(competitor_key)
+    if not cfg:
+        return []
 
-  // ── Competitor Monitor v2 functions ──
-  const compAddSite = async () => {
-    if (!compNewSiteName.trim() || !compNewSiteUrl.trim()) return;
-    const rawUrl  = compNewSiteUrl.trim();
-    const fullUrl = rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
-    const key     = compNewSiteName.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-    try {
-      await fetch(`${API_URL}/competitors/add`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, name: compNewSiteName.trim(), url: fullUrl }),
-      });
-    } catch {}
-    setCompSites(p => [...p, { id: key, name: compNewSiteName.trim(), url: fullUrl }]);
-    setCompNewSiteName(""); setCompNewSiteUrl("");
-  };
+    domain       = cfg.get("domain") or cfg["base_url"].replace("https://","").replace("http://","").rstrip("/")
+    domain_clean = domain.replace("www.", "")
+    all_organic  = []
+    fetch_all    = (max_results == 0)
+    per_page     = 10
+    max_pages    = 10 if fetch_all else max(1, (max_results * 2 + per_page - 1) // per_page)
 
-  const compRemoveSite = async (siteId: string) => {
-    try { await fetch(`${API_URL}/competitors/${siteId}`, { method: "DELETE" }); } catch {}
-    setCompSites(p => p.filter(s => s.id !== siteId));
-  };
+    for page in range(max_pages):
+        organic = _fetch_serp_page(domain_clean, query, page * per_page, per_page)
+        if not organic:
+            break
+        all_organic.extend(organic)
+        if not fetch_all and len(all_organic) >= max_results * 2:
+            break
 
-  const compAddRow = () => setCompRows(p => [...p, { id: Date.now().toString(), sku: "", query: "", status: "idle", results: [] }]);
-  const compRemoveRow = (id: string) => { if (compRows.length > 1) setCompRows(p => p.filter(r => r.id !== id)); };
-  const compUpdateRow = (id: string, field: "sku"|"query", val: string) => setCompRows(p => p.map(r => r.id === id ? {...r, [field]: val} : r));
+    if not all_organic:
+        return [{
+            "competitor": competitor_key, "query": query,
+            "title": None, "price": None, "currency": "SAR",
+            "link": None, "image": None, "available": None,
+            "scraped_at": datetime.utcnow().isoformat(),
+            "error": "لم يُعثر على المنتج في هذا الموقع",
+        }]
 
-  const compSearchRow = async (id: string) => {
-    const row = compRows.find(r => r.id === id);
-    if (!row || !row.query.trim()) return;
-    setCompRows(p => p.map(r => r.id === id ? {...r, status: "searching", results: []} : r));
-    try {
-      const rowSite = (row as any).site?.trim();
+    # فلتر صفحات المنتجات
+    product_items = [i for i in all_organic if _is_product_page(i.get("link", ""))]
+    if not product_items:
+        product_items = all_organic
 
-      // إذا في موقع مخصص في الصف — أضفه في backend أولاً ثم ابحث فيه
-      let siteKeys: string[];
-      if (rowSite) {
-        const rawUrl  = rowSite.startsWith("http") ? rowSite : "https://" + rowSite;
-        const domain  = rawUrl.replace("https://","").replace("http://","").replace("www.","").split("/")[0];
-        const key     = domain.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-        // أضف في backend إذا مو موجود
-        try {
-          await fetch(`${API_URL}/competitors/add`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ key, name: domain, url: rawUrl }),
-          });
-        } catch {}
-        siteKeys = [key];
-      } else {
-        // بدون موقع مخصص → ابحث في كل المواقع المضافة
-        siteKeys = compSites.map(s => s.id);
-        if (siteKeys.length === 0) {
-          setCompRows(p => p.map(r => r.id === id ? {...r, status: "done", results: [{ competitor: "—", title: null, price: null, currency: "SAR", link: null, available: null, error: "أدخل موقعاً في خانة الموقع" }]} : r));
-          return;
-        }
-      }
+    limit   = len(product_items) if fetch_all else min(max_results, len(product_items))
+    results = []
+    for item in product_items[:limit]:
+        results.append(_parse_serp_item(item, competitor_key, query, fetch_details))
 
-      const res = await fetch(`${API_URL}/competitors/scan`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sku:             row.sku || row.query,
-          query:           row.query,
-          competitor_keys: siteKeys,
-          background:      false,
-          max_results:     3,
-          fetch_details:   true,
-        })
-      });
-      const data = await res.json();
-      const flat: CompResult[] = [];
-      const displayName = rowSite
-        ? rowSite.replace("https://","").replace("http://","").replace("www.","").split("/")[0]
-        : "";
-      Object.entries(data.results || {}).forEach(([comp, items]: [string, any[]]) => {
-        const siteName = displayName || compSites.find(s => s.id === comp)?.name || comp;
-        if (!items || items.length === 0) {
-          flat.push({ competitor: siteName, title: null, price: null, currency: "SAR", link: null, available: null, error: "لم يُعثر على المنتج" });
-        } else {
-          items.forEach((i: any) => flat.push({ competitor: siteName, title: i.title, price: i.price, currency: i.currency || "SAR", link: i.link, available: i.available, error: i.error }));
-        }
-      });
-      setCompRows(p => p.map(r => r.id === id ? {...r, status: "done", results: flat} : r));
-    } catch(e: any) {
-      setCompRows(p => p.map(r => r.id === id ? {...r, status: "error", results: []} : r));
+    return results
+
+
+@app.get("/competitors/list")
+def list_competitors():
+    return {
+        key: {"name": cfg["name"], "base_url": cfg["base_url"]}
+        for key, cfg in COMPETITORS_CONFIG.items()
     }
-  };
 
-  const compSearchAll = async () => {
-    setCompSearching(true);
-    for (const row of compRows.filter(r => r.query.trim())) await compSearchRow(row.id);
-    setCompSearching(false);
-  };
 
-  const compHandleExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    setCompExcelFile(file.name);
-    await loadXLSX();
-    const XLSX = (window as any).XLSX;
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-    if (rows.length > 0) {
-      const cols = Object.keys(rows[0]);
-      setCompExcelCols(cols);
-      const skuC = cols.find(c => /sku|style/i.test(c)) || cols[0];
-      const nameC = cols.find(c => /title|name|product/i.test(c)) || cols[1] || cols[0];
-      setCompSkuCol(skuC); setCompNameCol(nameC);
-      setCompExcelRows(rows as any);
-      setCompRows((rows as any[]).slice(0, 50).map((row: any) => ({
-        id: Math.random().toString(36).slice(2),
-        sku: String(row[skuC] || "").trim(),
-        query: String(row[nameC] || row[skuC] || "").trim(),
-        status: "idle" as const, results: []
-      })).filter((r: any) => r.query));
+@app.post("/competitors/scan")
+def scan_competitor_product(req: CompetitorScanRequest):
+    keys = req.competitor_keys or list(COMPETITORS_CONFIG.keys())
+
+    # أضف أي موقع مو موجود تلقائياً من الـ key (domain)
+    for key in keys:
+        if key not in COMPETITORS_CONFIG:
+            # حاول تبني base_url من الـ key
+            domain = key.replace("_", ".")
+            # إذا يبدو domain حقيقي
+            if "." in domain:
+                COMPETITORS_CONFIG[key] = {
+                    "name":     domain,
+                    "base_url": f"https://{domain}",
+                    "domain":   domain,
+                }
+
+    # تجاهل أي keys ما عندها domain صحيح
+    valid_keys = [k for k in keys if k in COMPETITORS_CONFIG]
+    if not valid_keys:
+        return {"sku": req.sku, "query": req.query, "results": {}, "total": 0,
+                "error": "لم يتم إضافة أي موقع — أضف موقعاً أولاً"}
+
+    all_results: dict = {}
+    for key in valid_keys:
+        results = _search_one_competitor(key, req.query, req.max_results, req.fetch_details)
+        all_results[key] = results
+        for r in results:
+            _competitor_results.append({**r, "sku": req.sku})
+
+    return {
+        "sku":     req.sku,
+        "query":   req.query,
+        "results": all_results,
+        "total":   sum(len(v) for v in all_results.values()),
     }
-  };
-
-  const compExportExcel = () => {
-    const XLSX = (window as any).XLSX;
-    const data: any[] = [];
-    compRows.forEach(row => {
-      if (row.results.length === 0) {
-        data.push({ "SKU": row.sku, "المنتج": row.query, "الموقع": "—", "الاسم عندهم": "—", "السعر": "—", "التوفر": "—", "الرابط": "—" });
-      } else {
-        row.results.forEach(r => data.push({ "SKU": row.sku, "المنتج": row.query, "الموقع": r.competitor, "الاسم عندهم": r.title||"—", "السعر": r.price||"—", "التوفر": r.available===true?"متوفر":r.available===false?"غير متوفر":"—", "الرابط": r.link||"—" }));
-      }
-    });
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "مراقبة المنافسين");
-    XLSX.writeFile(wb, "مراقبة_المنافسين.xlsx");
-  };
-
-  const handleScrape = async (targetUrl: string, existingId?: string) => {
-    if (!targetUrl.trim()) return;
-    if (existingId) setRefreshingId(existingId); else setScrapeLoading(true);
-    setScrapeError("");
-    try {
-      const res = await fetch(`${API_URL}/scrape`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: targetUrl }) });
-      if (!res.ok) throw new Error("فشل في جلب البيانات");
-      const data = await res.json();
-      const product: ScrapedProduct = { id: existingId || Math.random().toString(36).slice(2), url: targetUrl, name: data.name || "—", price: data.price || "—", image: data.image || "", available: !!data.name, scrapedAt: new Date().toLocaleTimeString("ar-SA") };
-      if (existingId) setProducts(p => p.map(x => x.id === existingId ? product : x));
-      else { setProducts(p => [product, ...p]); setScrapeUrl(""); }
-    } catch (e: unknown) { setScrapeError(e instanceof Error ? e.message : "خطأ"); }
-    finally { setScrapeLoading(false); setRefreshingId(null); }
-  };
-
-  const addStore = () => {
-    if (!storeName.trim() || !storeUrl.trim()) return;
-    const url = storeUrl.startsWith("http") ? storeUrl.trim() : "https://" + storeUrl.trim();
-    setStores(p => [...p, { id: Math.random().toString(36).slice(2), name: storeName.trim(), url, urlTemplate: storeTemplate.trim() }]);
-    setStoreName(""); setStoreUrl(""); setStoreTemplate("");
-  };
-
-  const doSearch = async () => {
-    if (!skuInput.trim() || stores.length === 0) return;
-    setSearching(true);
-    const sid = Math.random().toString(36).slice(2);
-    const sku = skuInput.trim();
-    const init: InventoryResult[] = stores.map(s => ({ storeId: s.id, storeName: s.name, count: 0, products: [], status: "loading" }));
-    setSearches(p => [{ id: sid, sku, results: init, searchedAt: new Date().toLocaleTimeString("ar-SA") }, ...p]);
-    setSkuInput("");
-    await Promise.all(stores.map(async (store) => {
-      try {
-        if (store.urlTemplate && store.urlTemplate.includes("{SKU}")) {
-          const directUrl = store.urlTemplate.replace("{SKU}", encodeURIComponent(sku));
-          const r = await fetch(`${API_URL}/scrape-dynamic`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: directUrl }) });
-          const d = await r.json();
-          const prod2 = d.name && d.name !== "0"
-            ? [{ name: d.name, url: directUrl, price: d.price || "—", available: true, snippet: "" }]
-            : d.results && d.results.length > 0
-            ? d.results.slice(0,3).map((p: any) => ({ name: p.name, url: p.url || directUrl, price: p.price || "—", available: true, snippet: "" }))
-            : [];
-          setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r2 => r2.storeId !== store.id ? r2 : { ...r2, count: prod2.length, products: prod2, status: "done" as const }) }));
-          return;
-        }
-        const site = store.url.replace("https://", "").replace("http://", "").replace(/\/+$/, "");
-        const res = await fetch(`${API_URL}/search-product`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sku, site }) });
-        const data = await res.json();
-        const prod = data.results && data.results.length > 0 ? data.results.slice(0, 3).map((p: any) => ({ name: p.name, url: p.url, price: p.price || "—", available: true, snippet: "" })) : [];
-        setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r => r.storeId !== store.id ? r : { ...r, count: prod.length, products: prod, status: "done" as const }) }));
-      } catch {
-        setSearches(p => p.map(s => s.id !== sid ? s : { ...s, results: s.results.map(r => r.storeId !== store.id ? r : { ...r, status: "error" as const, error: "فشل الاتصال" }) }));
-      }
-    }));
-    setSearching(false);
-  };
 
 
-  // ── Sidebar JSX ──
-  const sidebarJSX = (
-    <div style={{ width: "240px", background: "#111118", borderLeft: "1px solid #1e1e2e", padding: "32px 20px", display: "flex", flexDirection: "column", gap: "8px", minHeight: "100vh", flexShrink: 0 }}>
-      <div style={{ fontSize: "22px", fontWeight: "900", color: "#c8b8ff", marginBottom: "32px" }}>وصال</div>
-      {NAV.map(item => (
-        <div key={item.label} onClick={() => setView(item.v as ViewType)}
-          style={{ padding: "10px 14px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", background: view === item.v && (item.v === "competitors" || item.v === "inventory") ? "#1a1a2e" : view === "dashboard" && item.v === "dashboard" && item.label === "لوحة التحكم" ? "#1a1a2e" : "transparent", color: (view === item.v && (item.v === "competitors" || item.v === "inventory")) || (view === "dashboard" && item.label === "لوحة التحكم") ? "#c8b8ff" : "#666", fontSize: "14px", fontWeight: "500" }}>
-          <span>{item.icon}</span>{item.label}
-        </div>
-      ))}
-      <div style={{ marginTop: "auto", padding: "10px 14px", borderRadius: "10px", background: "#1a1a2e", cursor: "pointer" }} onClick={() => { localStorage.removeItem("wesal_token"); localStorage.removeItem("wesal_user"); setView("landing"); setUser(null); }}>
-        <span style={{ color: "#ff6b6b", fontSize: "14px" }}>⬡ تسجيل الخروج</span>
-      </div>
-    </div>
-  );
+@app.post("/competitors/scan-all")
+def scan_catalog(products: list, competitor_keys: Optional[List[str]] = None, fetch_details: bool = False):
+    """يمسح كتالوج كامل — fetch_details=False للسرعة."""
+    keys = competitor_keys or list(COMPETITORS_CONFIG.keys())
+    for product in products:
+        sku   = product.get("sku", "")
+        query = product.get("query", "")
+        if sku and query:
+            for key in keys:
+                results = _search_one_competitor(key, query, 3, fetch_details)
+                for r in results:
+                    _competitor_results.append({**r, "sku": sku})
+    return {"status": "done", "scanned": len(products)}
 
-  // ══════════════════════════════════════
-  // INVENTORY VIEW
-  // ══════════════════════════════════════
-  if (view === "inventory") return (
-    <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
 
-      <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
-      <div style={{ display: "flex", minHeight: "100vh" }}>
-        {sidebarJSX}
-        <div style={{ flex: 1, padding: "40px", overflowY: "auto" }}>
-          <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 6px" }}>مراقبة المخزون 📦</h1>
-          <p style={{ color: "#555", fontSize: "13px", margin: "0 0 28px" }}>ارفع ملف Excel أو ابحث يدوياً في عدة متاجر بنفس الوقت</p>
+@app.get("/competitors/results")
+def get_all_results(competitor: Optional[str] = None, limit: int = 100):
+    results = _competitor_results
+    if competitor:
+        results = [r for r in results if r.get("competitor") == competitor]
+    results = sorted(results, key=lambda r: r.get("scraped_at", ""), reverse=True)
+    return {"count": len(results[:limit]), "results": results[:limit]}
 
-          <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "24px", alignItems: "start" }}>
 
-            {/* ─ Left: Stores ─ */}
-            <div>
-              <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", padding: "20px", marginBottom: "12px" }}>
-                <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#888", fontWeight: "600" }}>إضافة متجر</p>
-                <input value={storeName} onChange={e => setStoreName(e.target.value)} placeholder="اسم المتجر" style={{ ...inputStyle, marginBottom: "8px" }} />
-                <input value={storeUrl} onChange={e => setStoreUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && addStore()} placeholder="https://store.com" style={{ ...inputStyle, marginBottom: "10px", direction: "ltr", textAlign: "left" }} />
-                <button onClick={addStore} style={{ width: "100%", padding: "10px", background: "#c8b8ff", color: "#0a0a0f", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "700", cursor: "pointer", fontFamily: "inherit" }}>+ إضافة</button>
-              </div>
-              {stores.length > 0 && (
-                <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", overflow: "hidden", marginBottom: "12px" }}>
-                  <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e1e2e", fontSize: "11px", color: "#555", fontWeight: "600" }}>المتاجر ({stores.length})</div>
-                  {stores.map(s => (
-                    <div key={s.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #141420", gap: "8px" }}>
-                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
-                      <div style={{ flex: 1, overflow: "hidden" }}>
-                        <div style={{ fontSize: "13px", fontWeight: "500" }}>{s.name}</div>
-                        <div style={{ fontSize: "11px", color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", direction: "ltr", textAlign: "left" }}>{s.urlTemplate || s.url}</div>
-                        {s.urlTemplate && <div style={{ fontSize: "10px", color: "#4ade80", marginTop: "2px" }}>✓ template رابط</div>}
-                      </div>
-                      <button onClick={() => setStores(p => p.filter(x => x.id !== s.id))} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "13px" }}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+@app.get("/competitors/results/{sku}")
+def get_sku_results(sku: str, competitor: Optional[str] = None):
+    results = [r for r in _competitor_results if r.get("sku") == sku]
+    if competitor:
+        results = [r for r in results if r.get("competitor") == competitor]
+    return {"sku": sku, "count": len(results), "results": results}
 
-            {/* ─ Right: Search ─ */}
-            <div>
 
-              {/* Excel Upload Section */}
-              <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", padding: "20px", marginBottom: "16px" }}>
-                <p style={{ margin: "0 0 14px", fontSize: "13px", color: "#888", fontWeight: "600" }}>رفع ملف Excel 📊</p>
+@app.post("/competitors/add")
+def add_competitor(req: AddCompetitorRequest):
+    """يضيف موقع منافس جديد — قبول otath.com أو https://otath.com"""
+    if req.key in COMPETITORS_CONFIG:
+        raise HTTPException(400, f"المنافس '{req.key}' موجود مسبقاً")
 
-                {!excelRows.length ? (
-                  <div>
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      style={{ border: "2px dashed #2a2a3e", borderRadius: "10px", padding: "28px", textAlign: "center", cursor: "pointer" }}
-                    >
-                      <div style={{ fontSize: "28px", marginBottom: "8px" }}>📊</div>
-                      <div style={{ fontSize: "14px", color: "#c8b8ff", marginBottom: "4px" }}>اضغط لرفع ملف Excel</div>
-                      <div style={{ fontSize: "12px", color: "#555" }}>.xlsx أو .xls</div>
-                    </div>
-                    <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleExcelUpload} style={{ display: "none" }} />
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ background: "#0d0d14", border: "1px solid #1e1e2e", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
-                      <span style={{ fontSize: "16px" }}>📄</span>
-                      <span style={{ fontSize: "13px", color: "#c8b8ff" }}>{excelFileName}</span>
-                      <span style={{ marginRight: "auto", fontSize: "12px", color: "#555" }}>{excelRows.length} صف</span>
-                      <button onClick={() => { setExcelRows([]); setExcelCols([]); setExcelResults([]); setExcelFileName(""); }} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "13px" }}>✕</button>
-                    </div>
+    url = req.url.strip()
+    if not url.startswith("http"):
+        url = "https://" + url.lstrip("/")
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "14px" }}>
-                      <div>
-                        <p style={{ margin: "0 0 6px", fontSize: "12px", color: "#666" }}>عمود البحث (SKU)</p>
-                        <select value={searchCol} onChange={e => setSearchCol(e.target.value)} style={{ ...inputStyle, padding: "8px 12px" }}>
-                          {excelCols.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <p style={{ margin: "0 0 6px", fontSize: "12px", color: "#666" }}>عمود الاسم (للعرض)</p>
-                        <select value={nameCol} onChange={e => setNameCol(e.target.value)} style={{ ...inputStyle, padding: "8px 12px" }}>
-                          {excelCols.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <p style={{ margin: "0 0 6px", fontSize: "12px", color: "#666" }}>عمود URL (اختياري)</p>
-                        <select value={urlCol} onChange={e => setUrlCol(e.target.value)} style={{ ...inputStyle, padding: "8px 12px" }}>
-                          <option value="">-- بدون --</option>
-                          {excelCols.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    {urlCol && <p style={{ margin: "0 0 12px", fontSize: "11px", color: "#4ade80" }}>✓ سيبحث مباشرة من عمود الـ URL — لا يحتاج متاجر</p>}
+    parsed   = urlparse(url)
+    domain   = parsed.netloc or parsed.path.split("/")[0]
+    base_url = f"{parsed.scheme or 'https'}://{domain}"
 
-                    {/* Preview */}
-                    <div style={{ background: "#0a0a0f", border: "1px solid #1e1e2e", borderRadius: "8px", overflow: "hidden", marginBottom: "14px" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-                        <thead>
-                          <tr>{excelCols.slice(0, 4).map(c => <th key={c} style={{ padding: "8px 12px", textAlign: "right", color: "#555", borderBottom: "1px solid #1e1e2e", fontWeight: "500" }}>{c}</th>)}</tr>
-                        </thead>
-                        <tbody>
-                          {excelRows.slice(0, 3).map((row, i) => (
-                            <tr key={i} style={{ borderBottom: "1px solid #141420" }}>
-                              {excelCols.slice(0, 4).map(c => <td key={c} style={{ padding: "7px 12px", color: c === searchCol ? "#c8b8ff" : "#e8e8f0" }}>{String(row[c] || "")}</td>)}
-                            </tr>
-                          ))}
-                          {excelRows.length > 3 && <tr><td colSpan={4} style={{ padding: "7px 12px", color: "#555", fontStyle: "italic", fontSize: "11px" }}>... و {excelRows.length - 3} صف آخر</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
+    COMPETITORS_CONFIG[req.key] = {
+        "name":     req.name,
+        "base_url": base_url,
+        "domain":   domain,
+    }
+    return {"status": "added", "key": req.key, "domain": domain, "total": len(COMPETITORS_CONFIG)}
 
-                    <button
-                      onClick={handleExcelSearch}
-                      disabled={excelSearching || stores.length === 0}
-                      style={{ width: "100%", padding: "12px", background: excelSearching || stores.length === 0 ? "#2a2a3e" : "#c8b8ff", color: excelSearching || stores.length === 0 ? "#888" : "#0a0a0f", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: "700", cursor: excelSearching || stores.length === 0 ? "not-allowed" : "pointer", fontFamily: "inherit" }}
-                    >
-                      {excelSearching ? `جاري البحث... (${excelResults.length} نتيجة)` : `ابدأ البحث في ${excelRows.length} منتج ←`}
-                    </button>
-                    {stores.length === 0 && <p style={{ margin: "8px 0 0", fontSize: "12px", color: "#ff6b6b" }}>⚠️ أضف متجراً أولاً من القائمة على اليسار</p>}
-                  </div>
-                )}
-              </div>
 
-              {/* Manual SKU Search */}
-              <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", padding: "20px", marginBottom: "20px" }}>
-                <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#888", fontWeight: "600" }}>بحث يدوي بـ SKU</p>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <input value={skuInput} onChange={e => setSkuInput(e.target.value)} onKeyDown={e => e.key === "Enter" && doSearch()} placeholder="مثال: كنبة L-shape أو SKU-1234"
-                    style={{ flex: 1, padding: "12px 16px", background: "#0a0a0f", border: "1px solid #2a2a3e", borderRadius: "10px", color: "#e8e8f0", fontSize: "14px", outline: "none", fontFamily: "inherit" }} />
-                  <button onClick={doSearch} disabled={searching || !skuInput.trim() || stores.length === 0}
-                    style={{ padding: "12px 22px", background: (searching || stores.length === 0) ? "#2a2a3e" : "#c8b8ff", color: (searching || stores.length === 0) ? "#888" : "#0a0a0f", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: "700", cursor: (searching || stores.length === 0) ? "not-allowed" : "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                    {searching ? "جاري..." : "بحث ←"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Excel Results Table */}
-              {excelResults.length > 0 && (
-                <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", overflow: "hidden", marginBottom: "20px" }}>
-                  <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e1e2e", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <span style={{ fontSize: "13px", fontWeight: "700", color: "#e8e8f0" }}>نتائج البحث</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "20px", fontSize: "11px", background: "#0d1f0d", color: "#4ade80", border: "1px solid #1a3a1a" }}>
-                      {excelResults.filter(r => r.found).length} موجود
-                    </span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "20px", fontSize: "11px", background: "#1f0d0d", color: "#f87171", border: "1px solid #3a1a1a" }}>
-                      {excelResults.filter(r => !r.found).length} غير موجود
-                    </span>
-                    {!excelSearching && (
-                      <button
-                        onClick={() => {
-                          const XLSX = (window as any).XLSX;
-                          const ws = XLSX.utils.json_to_sheet(excelResults.map((r,i) => ({ "#": i+1, "اسم المنتج": r.productName, "SKU": r.sku, "المتجر": r.storeName, "السعر": r.price, "الحالة": r.found ? "موجود" : "غير موجود", "الرابط": r.url })));
-                          const wb = XLSX.utils.book_new();
-                          XLSX.utils.book_append_sheet(wb, ws, "النتائج");
-                          XLSX.writeFile(wb, "نتائج_المخزون.xlsx");
-                        }}
-                        style={{ marginRight: "auto", padding: "6px 14px", background: "#1a1a2e", border: "1px solid #2a2a4e", borderRadius: "8px", color: "#c8b8ff", fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}
-                      >
-                        تصدير Excel ↓
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "600px" }}>
-                      <thead>
-                        <tr style={{ background: "#0a0a0f" }}>
-                          <th style={{ padding: "9px 14px", textAlign: "right", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "30px" }}>#</th>
-                          <th style={{ padding: "9px 14px", textAlign: "right", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e" }}>اسم المنتج</th>
-                          <th style={{ padding: "9px 14px", textAlign: "right", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "90px" }}>SKU</th>
-                          <th style={{ padding: "9px 14px", textAlign: "right", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "100px" }}>المتجر</th>
-                          <th style={{ padding: "9px 14px", textAlign: "center", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "100px" }}>السعر</th>
-                          <th style={{ padding: "9px 14px", textAlign: "center", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "90px" }}>الحالة</th>
-                          <th style={{ padding: "9px 14px", textAlign: "center", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "60px" }}>رابط</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {excelResults.map((r, i) => (
-                          <tr key={i} style={{ borderBottom: "1px solid #141420", background: i % 2 === 0 ? "transparent" : "#0d0d14" }}>
-                            <td style={{ padding: "10px 14px", color: "#555" }}>{i + 1}</td>
-                            <td style={{ padding: "10px 14px", maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.productName}</td>
-                            <td style={{ padding: "10px 14px", color: "#c8b8ff", fontSize: "12px" }}>{r.sku}</td>
-                            <td style={{ padding: "10px 14px", color: "#888", fontSize: "12px" }}>{r.storeName}</td>
-                            <td style={{ padding: "10px 14px", textAlign: "center", color: "#c8b8ff", fontWeight: "600" }}>{r.price}</td>
-                            <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 10px", borderRadius: "20px", fontSize: "11px", background: r.found ? "#0d1f0d" : "#1f0d0d", color: r.found ? "#4ade80" : "#f87171", border: `1px solid ${r.found ? "#1a3a1a" : "#3a1a1a"}` }}>
-                                <span style={{ width: 5, height: 5, borderRadius: "50%", background: r.found ? "#4ade80" : "#f87171" }} />
-                                {r.found ? "موجود" : "غير موجود"}
-                              </span>
-                            </td>
-                            <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                              {r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer" style={{ color: "#7c6af7", fontSize: "12px", textDecoration: "none" }}>فتح ↗</a> : <span style={{ color: "#333" }}>—</span>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Manual Search Results */}
-              {searches.length > 0 && searches.map(search => (
-                <div key={search.id} style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", overflow: "hidden", marginBottom: "20px" }}>
-                  <div style={{ padding: "14px 20px", borderBottom: "1px solid #1e1e2e", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <span style={{ fontSize: "14px", fontWeight: "700", color: "#c8b8ff" }}>{search.sku}</span>
-                    <span style={{ fontSize: "11px", color: "#555" }}>{search.searchedAt}</span>
-                    <span style={{ marginRight: "auto", fontSize: "11px", color: "#888" }}>{search.results.reduce((acc, r) => acc + (r.status === "done" ? r.count : 0), 0)} نتيجة</span>
-                  </div>
-                  {search.results.map(r => (
-                    <div key={r.storeId}>
-                      <div style={{ padding: "10px 20px", background: "#0f0f1a", display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #1e1e2e" }}>
-                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: r.status === "loading" ? "#ffd166" : r.status === "error" ? "#ff6b6b" : "#4ade80" }} />
-                        <span style={{ fontSize: "13px", fontWeight: "600", color: "#c8b8ff" }}>{r.storeName}</span>
-                        {r.status === "loading" && <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#555" }}><span style={{ width: 10, height: 10, border: "2px solid #333", borderTopColor: "#c8b8ff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />جاري البحث...</span>}
-                        {r.status === "done" && <span style={{ fontSize: "12px", color: "#555" }}>{r.count} منتج</span>}
-                        {r.status === "error" && <span style={{ fontSize: "12px", color: "#ff6b6b" }}>⚠️ {r.error}</span>}
-                      </div>
-                      {r.status === "done" && r.products.length > 0 && (
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-                          <thead><tr style={{ background: "#0a0a0f" }}>
-                            <th style={{ padding: "8px 16px", textAlign: "right", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e" }}>اسم المنتج</th>
-                            <th style={{ padding: "8px 16px", textAlign: "center", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "110px" }}>السعر</th>
-                            <th style={{ padding: "8px 16px", textAlign: "center", color: "#555", fontWeight: "500", borderBottom: "1px solid #1e1e2e", width: "70px" }}>رابط</th>
-                          </tr></thead>
-                          <tbody>
-                            {r.products.map((p, idx) => (
-                              <tr key={idx} style={{ borderBottom: "1px solid #141420", background: idx % 2 === 0 ? "transparent" : "#0d0d14" }}>
-                                <td style={{ padding: "10px 16px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</td>
-                                <td style={{ padding: "10px 16px", textAlign: "center", color: "#c8b8ff", fontWeight: "600" }}>{p.price || "—"}</td>
-                                <td style={{ padding: "10px 16px", textAlign: "center" }}><a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: "#7c6af7", fontSize: "12px", textDecoration: "none" }}>فتح ↗</a></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                      {r.status === "done" && r.products.length === 0 && <div style={{ padding: "16px 20px", fontSize: "13px", color: "#555" }}>لا توجد نتائج</div>}
-                    </div>
-                  ))}
-                </div>
-              ))}
-
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ══════════════════════════════════════
-
-  // ══════════════════════════════════════
-  // REPORTS / KPI DASHBOARD VIEW
-  // ══════════════════════════════════════
-  if (view === "reports") {
-    const d = erpData as any;
-    const sc = (s) => s === "critical" ? "#E24B4A" : s === "warning" ? "#EF9F27" : "#1D9E75";
-    const sb = (s) => s === "critical" ? "#1f0d0d" : s === "warning" ? "#1a1400" : "#0d1f0d";
-    const sl = (s) => s === "critical" ? "حرج" : s === "warning" ? "تحذير" : "جيد";
-    const sev = (n, t1, t2) => !d ? "good" : n > t1 ? "critical" : n > t2 ? "warning" : "good";
-
-    const kpis = [
-      { n:"الطلبات المتأخرة", icon:"🚨", val: d ? String(d.late_orders?.count ?? "—") : "—", unit:"طلب", target:"الهدف: أقل من 10", key:"late_orders", sev: sev(d?.late_orders?.count||0, 10, 0), pct: Math.min(100,(d?.late_orders?.count||0)*2), insights:[`${d?.late_orders?.count||0} طلب تجاوز تاريخ التسليم`,`متوسط التأخير ${d?.late_orders?.items?.length>0?Math.round(d.late_orders.items.reduce((s,o)=>s+(o.days_late||0),0)/d.late_orders.items.length):0} يوم`,"تحتاج تدخل فوري"], recs:["تواصل مع العملاء المتأثرين فوراً","راجع سياسة التسليم","فعّل تنبيهات يومية"] },
-      { n:"الطلبات العالقة", icon:"⏸", val: d ? String(d.stuck_orders?.count ?? "—") : "—", unit:"طلب", target:"الهدف: أقل من 5", key:"stuck_orders", sev: sev(d?.stuck_orders?.count||0, 8, 3), pct: Math.min(100,(d?.stuck_orders?.count||0)*8), insights:[`${d?.stuck_orders?.count||0} طلب بانتظار مورد أو شحن`,"راجع حالة كل طلب يدوياً"], recs:["راجع حالة الشحن لكل طلب","أنشئ تقرير أسبوعي تلقائي"] },
-      { n:"وقت المعالجة", icon:"⏱", val: d ? `${d.avg_processing_days?.value??"—"}` : "—", unit:"يوم", target:"الهدف: 1.5 يوم", key:"avg_processing_days", sev: !d?"good":d.avg_processing_days?.value>3?"critical":d.avg_processing_days?.value>1.5?"warning":"good", pct: Math.min(100,((d?.avg_processing_days?.value||0)/3)*100), insights:[`متوسط ${d?.avg_processing_days?.value||0} يوم`,`مبني على ${d?.avg_processing_days?.sample||0} طلب`], recs:["راجع مراحل التأخير","سرّع إصدار البوليصة"] },
-      { n:"المنتجات النافدة", icon:"📦", val: d ? String(d.out_of_stock?.count??"—") : "—", unit:"SKU", target:"الهدف: صفر", key:"out_of_stock", sev: sev(d?.out_of_stock?.count||0, 5, 0), pct: Math.min(100,(d?.out_of_stock?.count||0)*5), insights:[`${d?.out_of_stock?.count||0} منتج نفد من المخزون`,"يؤثر على تنفيذ الطلبات"], recs:["أنشئ أوامر شراء فورية","أعلم فريق المبيعات"] },
-      { n:"قريبة من النفاد", icon:"⚠️", val: d ? String(d.low_stock?.count??"—") : "—", unit:"SKU", target:"الهدف: أقل من 15", key:"low_stock", sev: sev(d?.low_stock?.count||0, 20, 0), pct: Math.min(100,(d?.low_stock?.count||0)*3), insights:[`${d?.low_stock?.count||0} SKU أقل من حد إعادة الطلب`,"ستنفد خلال أيام"], recs:["ابدأ أوامر الشراء فوراً","رتّب حسب الأولوية"] },
-      { n:"تأخر الموردين", icon:"🏭", val: d ? String(d.late_po?.count??"—") : "—", unit:"PO", target:"الهدف: صفر", key:"late_po", sev: sev(d?.late_po?.count||0, 5, 0), pct: Math.min(100,(d?.late_po?.count||0)*6), insights:[`${d?.late_po?.count||0} أوامر شراء متأخرة`,"يؤثر على تنفيذ طلبات العملاء"], recs:["اتصل بالموردين اليوم","فعّل غرامات التأخير"] },
-      { n:"الشكاوى المفتوحة", icon:"💬", val: d ? String(d.open_complaints?.count??"—") : "—", unit:"شكوى", target:"الهدف: صفر", key:"open_complaints", sev: sev(d?.open_complaints?.count||0, 5, 0), pct: Math.min(100,(d?.open_complaints?.count||0)*10), insights:[`${d?.open_complaints?.count||0} شكوى مفتوحة`,`${d?.open_complaints?.no_reply_24h||0} بدون رد منذ 24 ساعة`], recs:["ردّ على الشكاوى غير المجابة فوراً","أضف قوالب ردود سريعة"] },
-      { n:"وقت الرد", icon:"📞", val: d ? `${d.avg_response_hours?.value??"—"}` : "—", unit:"ساعة", target:"الهدف: 2 ساعة", key:"avg_response_hours", sev: !d?"good":d.avg_response_hours?.value>6?"critical":d.avg_response_hours?.value>2?"warning":"good", pct: Math.min(100,((d?.avg_response_hours?.value||0)/8)*100), insights:[`متوسط ${d?.avg_response_hours?.value||0} ساعة للرد`,d?.avg_response_hours?.value<=2?"أفضل من الهدف ✓":"تجاوز الهدف"], recs:["حافظ على معدل الرد الجيد","وثّق أفضل الممارسات"] },
-      { n:"المبيعات", icon:"💰", val: d ? `${(d.daily_sales?.value||0).toLocaleString("ar-SA")}` : "—", unit:"ر.س", target:`الهدف: 20,000 · ${d?.daily_sales?.period||""}`, key:"daily_sales", sev: !d?"good":d.daily_sales?.value>=20000?"good":d.daily_sales?.value>=10000?"warning":"critical", pct: Math.min(100,((d?.daily_sales?.value||0)/20000)*100), insights:[`${(d?.daily_sales?.value||0).toLocaleString("ar-SA")} ر.س`,`${d?.daily_sales?.orders_count||0} فاتورة`], recs:["تابع أداء المبيعات يومياً","راجع القنوات الأقل أداءً"] },
-      { n:"التوصيل في الوقت", icon:"🚚", val: d ? `${d.on_time_delivery?.pct??"—"}` : "—", unit:"%", target:"الهدف: 95%", key:"on_time_delivery", sev: !d?"good":(d.on_time_delivery?.pct||0)>=95?"good":(d.on_time_delivery?.pct||0)>=80?"warning":"critical", pct: d?.on_time_delivery?.pct||0, insights:[`${d?.on_time_delivery?.pct||0}% من الطلبات تُسلّم في الوقت`,`${d?.on_time_delivery?.count||0} تسليم`], recs:["تحليل أسباب التأخير","تحسين التنسيق مع شركات الشحن"] },
-    ];
-
-    const critical = kpis.filter(k=>k.sev==="critical").length;
-    const warning = kpis.filter(k=>k.sev==="warning").length;
-    const good = kpis.filter(k=>k.sev==="good").length;
-
-    const renderDrill = (idx) => {
-      const k = kpis[idx];
-      const raw = d?.[k.key];
-      const items = raw?.items || [];
-      return (
-        <div style={{background:"#0d0d14",border:"1px solid #378ADD",borderRadius:"14px",padding:"18px",marginBottom:"10px",animation:"fadeIn .2s ease"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
-            <div>
-              <div style={{fontSize:"15px",fontWeight:"700"}}>{k.icon} {k.n} — تفاصيل</div>
-              <div style={{fontSize:"11px",color:"#555",marginTop:"2px"}}>{k.val} {k.unit} · ERPNext</div>
-            </div>
-            <button onClick={()=>setActiveKpi(null)} style={{padding:"4px 12px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"6px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>✕ إغلاق</button>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}}>
-            <div style={{background:"#0a1520",border:"1px solid #1e3a5f",borderRadius:"10px",padding:"12px"}}>
-              <div style={{fontSize:"11px",fontWeight:"700",color:"#60a5fa",marginBottom:"8px"}}>📊 تحليل</div>
-              {k.insights.map((ins,i)=>(
-                <div key={i} style={{display:"flex",gap:"6px",marginBottom:"5px"}}>
-                  <span style={{color:"#60a5fa",fontSize:"10px",flexShrink:0}}>◆</span>
-                  <span style={{fontSize:"12px",color:"#b0c4de",lineHeight:"1.6"}}>{ins}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{background:"#0a1a0f",border:"1px solid #1a3a1a",borderRadius:"10px",padding:"12px"}}>
-              <div style={{fontSize:"11px",fontWeight:"700",color:"#4ade80",marginBottom:"8px"}}>💡 التوصيات</div>
-              {k.recs.map((rec,i)=>(
-                <div key={i} style={{display:"flex",gap:"6px",marginBottom:"5px"}}>
-                  <span style={{color:"#4ade80",fontSize:"10px",flexShrink:0}}>→</span>
-                  <span style={{fontSize:"12px",color:"#86efac",lineHeight:"1.6"}}>{rec}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          {items.length > 0 && (
-            <div style={{background:"#0a0a0f",borderRadius:"10px",overflow:"hidden",marginBottom:"12px"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
-                <thead><tr style={{background:"#111118"}}>
-                  {k.key==="late_orders" && ["الطلب","العميل","أيام التأخير","المبلغ"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                  {k.key==="stuck_orders" && ["الطلب","العميل","الحالة","التاريخ"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                  {["out_of_stock","low_stock"].includes(k.key) && ["SKU","المستودع","الكمية"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                  {k.key==="late_po" && ["PO","المورد","الاستحقاق","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                  {k.key==="open_complaints" && ["#","العميل","الموضوع","الحالة"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"right",color:"#555",fontWeight:"600",borderBottom:"1px solid #1e1e2e"}}>{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  {items.slice(0,10).map((item,i)=>(
-                    <tr key={i} style={{borderBottom:"1px solid #141420",background:i%2===0?"transparent":"#0d0d14"}}>
-                      {k.key==="late_orders" && <>
-                        <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
-                        <td style={{padding:"7px 10px",maxWidth:"120px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.customer}</td>
-                        <td style={{padding:"7px 10px"}}><span style={{background:item.days_late>30?"#1f0d0d":"#1a1400",color:item.days_late>30?"#f87171":"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.days_late} يوم</span></td>
-                        <td style={{padding:"7px 10px",color:"#fbbf24",fontSize:"11px"}}>{item.amount?`${Number(item.amount).toLocaleString()} ر.س`:"—"}</td>
-                      </>}
-                      {k.key==="stuck_orders" && <>
-                        <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
-                        <td style={{padding:"7px 10px"}}>{item.customer}</td>
-                        <td style={{padding:"7px 10px"}}><span style={{background:"#1a1400",color:"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
-                        <td style={{padding:"7px 10px",color:"#888",fontSize:"11px"}}>{item.date}</td>
-                      </>}
-                      {["out_of_stock","low_stock"].includes(k.key) && <>
-                        <td style={{padding:"7px 10px",color:"#c8b8ff"}}>{item.sku}</td>
-                        <td style={{padding:"7px 10px",color:"#888"}}>{item.warehouse}</td>
-                        <td style={{padding:"7px 10px"}}><span style={{background:k.key==="out_of_stock"?"#1f0d0d":"#1a1400",color:k.key==="out_of_stock"?"#f87171":"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.qty}</span></td>
-                      </>}
-                      {k.key==="late_po" && <>
-                        <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
-                        <td style={{padding:"7px 10px"}}>{item.supplier}</td>
-                        <td style={{padding:"7px 10px",color:"#f87171"}}>{item.due}</td>
-                        <td style={{padding:"7px 10px"}}><span style={{background:"#1f0d0d",color:"#f87171",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
-                      </>}
-                      {k.key==="open_complaints" && <>
-                        <td style={{padding:"7px 10px",color:"#c8b8ff",fontSize:"11px"}}>{item.id}</td>
-                        <td style={{padding:"7px 10px"}}>{item.customer}</td>
-                        <td style={{padding:"7px 10px",color:"#888",maxWidth:"150px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.subject}</td>
-                        <td style={{padding:"7px 10px"}}><span style={{background:"#1a1400",color:"#fbbf24",padding:"2px 8px",borderRadius:"10px",fontSize:"10px"}}>{item.status}</span></td>
-                      </>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {items.length > 10 && <div style={{padding:"8px",fontSize:"11px",color:"#555",textAlign:"center"}}>+ {items.length-10} سجل إضافي</div>}
-            </div>
-          )}
-          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-            <button style={{padding:"7px 14px",background:"#1a2a1e",border:"1px solid #4ade80",borderRadius:"8px",color:"#4ade80",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>📋 إنشاء Tasks</button>
-            <button style={{padding:"7px 14px",background:"#1a2a1e",border:"1px solid #25d366",borderRadius:"8px",color:"#25d366",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>💬 واتساب</button>
-            <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>📊 Excel</button>
-            <a href="http://144.91.102.29" target="_blank" rel="noopener noreferrer" style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #555",borderRadius:"8px",color:"#888",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",textDecoration:"none"}}>🔗 ERPNext ↗</a>
-          </div>
-        </div>
-      );
-    };
-
-    const renderKCard = (k, i) => (
-      <div onClick={()=>setActiveKpi(activeKpi===i?null:i)}
-        style={{background:"#111118",border:`1px solid ${activeKpi===i?"#378ADD":"#1e1e2e"}`,borderTop:`3px solid ${sc(k.sev)}`,borderRadius:"12px",padding:"14px",cursor:"pointer",position:"relative",transition:"all .15s"}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}>
-          <div style={{fontSize:"11px",color:"#666"}}>{k.n}</div>
-          <span style={{background:sb(k.sev),color:sc(k.sev),padding:"1px 7px",borderRadius:"8px",fontSize:"10px"}}>{sl(k.sev)}</span>
-        </div>
-        <div style={{fontSize:"24px",fontWeight:"700",color:sc(k.sev),lineHeight:"1.1",marginBottom:"2px"}}>
-          {erpLoading?<span style={{width:10,height:10,border:`2px solid #333`,borderTopColor:sc(k.sev),borderRadius:"50%",display:"inline-block",animation:"spin .8s linear infinite"}}/>:k.val}
-          <span style={{fontSize:"12px",fontWeight:"400",color:"#555",marginRight:"4px"}}>{k.unit}</span>
-        </div>
-        <div style={{fontSize:"10px",color:"#555"}}>{k.target}</div>
-        <div style={{height:"3px",background:"#1a1a2e",borderRadius:"2px",marginTop:"8px"}}>
-          <div style={{width:`${k.pct}%`,height:"100%",background:sc(k.sev),borderRadius:"2px",transition:"width .6s"}}></div>
-        </div>
-      </div>
-    );
-
-    return (
-      <div style={{fontFamily:"'Tajawal', sans-serif",direction:"rtl",minHeight:"100vh",background:"#0a0a0f",color:"#e8e8f0"}}>
-        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet"/>
-        <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}} @keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
-        <div style={{display:"flex",minHeight:"100vh"}}>
-          {sidebarJSX}
-          <div style={{flex:1,padding:"28px 32px",overflowY:"auto"}}>
-
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"20px"}}>
-              <div>
-                <h1 style={{fontSize:"22px",fontWeight:"800",margin:"0 0 3px"}}>مركز القرار 📊</h1>
-                <div style={{fontSize:"12px",display:"flex",alignItems:"center",gap:"6px"}}>
-                  {erpLoading?<span style={{color:"#555",display:"flex",alignItems:"center",gap:"4px"}}><span style={{width:7,height:7,border:"2px solid #333",borderTopColor:"#c8b8ff",borderRadius:"50%",display:"inline-block",animation:"spin .8s linear infinite"}}/>جاري الجلب...</span>
-                  :erpError?<span style={{color:"#f87171"}}>⚠️ {erpError}</span>
-                  :d?<span style={{color:"#4ade80",display:"flex",alignItems:"center",gap:"4px"}}><span style={{width:7,height:7,borderRadius:"50%",background:"#4ade80",animation:"pulse 2s infinite"}}/>ERPNext متصل · {lastFetched}</span>
-                  :null}
-                </div>
-              </div>
-              <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-                {["اليوم","الأسبوع","الشهر","الربع","السنة"].map((p,i)=>(
-                  <button key={p} onClick={()=>{setTimePeriod(i);fetchKpis(i);}} style={{padding:"5px 12px",background:timePeriod===i?"#1a1a2e":"transparent",border:`1px solid ${timePeriod===i?"#c8b8ff":"#2a2a3e"}`,borderRadius:"20px",color:timePeriod===i?"#c8b8ff":"#666",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
-                ))}
-                <button onClick={()=>fetchKpis()} disabled={erpLoading} style={{padding:"5px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"20px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",marginRight:"4px"}}>↻ تحديث</button>
-              </div>
-            </div>
-
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"10px",marginBottom:"18px"}}>
-              {[{l:"🔥 حرج",c:critical,col:"#E24B4A",bg:"#1f0d0d",br:"#3a1a1a"},{l:"⚠️ تحذير",c:warning,col:"#EF9F27",bg:"#1a1400",br:"#3a2800"},{l:"✅ جيد",c:good,col:"#1D9E75",bg:"#0d1f0d",br:"#1a3a1a"}].map(g=>(
-                <div key={g.l} style={{background:g.bg,border:`1px solid ${g.br}`,borderRadius:"12px",padding:"14px 16px"}}>
-                  <div style={{fontSize:"12px",fontWeight:"700",color:g.col,marginBottom:"4px"}}>{g.l}</div>
-                  <div style={{fontSize:"30px",fontWeight:"800",color:g.col}}>{g.c}</div>
-                  <div style={{fontSize:"10px",color:"#555",marginTop:"2px"}}>مؤشر</div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"8px"}}>
-              {kpis.slice(0,5).map((k,i)=>renderKCard(k, i))}
-            </div>
-            {activeKpi!==null&&activeKpi<5&&renderDrill(activeKpi)}
-
-            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"8px"}}>
-              {kpis.slice(5).map((k,ii)=>renderKCard(k, ii+5))}
-            </div>
-            {activeKpi!==null&&activeKpi>=5&&renderDrill(activeKpi)}
-
-            <div style={{display:"grid",gridTemplateColumns:"1.2fr .8fr",gap:"12px",marginTop:"8px"}}>
-              <div style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:"14px",padding:"18px"}}>
-                <div style={{fontSize:"14px",fontWeight:"700",marginBottom:"12px"}}>الملخص التنفيذي</div>
-                <div style={{background:"#0a1520",border:"1px solid #1e3a5f",borderRadius:"10px",padding:"12px",marginBottom:"12px"}}>
-                  <div style={{fontSize:"11px",color:"#60a5fa",fontWeight:"700",marginBottom:"6px"}}>أعلى مخاطرة</div>
-                  <p style={{fontSize:"12px",color:"#b0c4de",lineHeight:"1.7",margin:0}}>
-                    {d?`الطلبات المتأخرة: ${d.late_orders?.count||0} · النافدة: ${d.out_of_stock?.count||0} SKU · تأخر الموردين: ${d.late_po?.count||0} PO`:"جاري تحميل البيانات..."}
-                  </p>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"8px",marginBottom:"12px"}}>
-                  {[["السبب","تأخر الموردين + نفاد المخزون"],["الأثر","طلبات متأخرة + عملاء غير راضين"],["القرار","شراء عاجل + تصعيد الموردين"]].map(([l,v])=>(
-                    <div key={l} style={{background:"#0a0a0f",borderRadius:"8px",padding:"10px"}}>
-                      <div style={{fontSize:"10px",color:"#555",marginBottom:"4px"}}>{l}</div>
-                      <div style={{fontSize:"11px",fontWeight:"600"}}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:"8px"}}>
-                  <button style={{padding:"7px 14px",background:"#1a2a1e",border:"1px solid #4ade80",borderRadius:"8px",color:"#4ade80",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>📋 إنشاء مهام</button>
-                  <button style={{padding:"7px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>💬 واتساب للإدارة</button>
-                </div>
-              </div>
-              <div style={{background:"#111118",border:"1px solid #1e1e2e",borderRadius:"14px",padding:"18px"}}>
-                <div style={{fontSize:"14px",fontWeight:"700",marginBottom:"12px"}}>جودة البيانات</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"12px"}}>
-                  {[["آخر مزامنة",lastFetched||"—"],["مصدر","ERPNext"],["متأخرة",String(d?.late_orders?.count||0)],["نافدة",String(d?.out_of_stock?.count||0)+" SKU"]].map(([l,v])=>(
-                    <div key={l} style={{background:"#0a0a0f",borderRadius:"8px",padding:"10px",textAlign:"center"}}>
-                      <div style={{fontSize:"10px",color:"#555",marginBottom:"4px"}}>{l}</div>
-                      <div style={{fontSize:"13px",fontWeight:"600",color:"#c8b8ff"}}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <a href="http://144.91.102.29" target="_blank" rel="noopener noreferrer" style={{display:"block",padding:"8px",background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:"8px",color:"#c8b8ff",fontSize:"12px",textDecoration:"none",textAlign:"center"}}>🔗 فتح ERPNext ↗</a>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // COMPETITORS VIEW
-  // ══════════════════════════════════════
-  // COMPETITORS VIEW — محدّث بالكامل
-  // ══════════════════════════════════════
-  // ══════════════════════════════════════
-  // COMPETITORS VIEW v2 — مواقع + منتجات
-  // ══════════════════════════════════════
-  if (view === "competitors") return (
-    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"#0a0a0f", color:"#e8e8f0" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-      <div style={{ display:"flex", minHeight:"100vh" }}>
-        {sidebarJSX}
-        <div style={{ flex:1, padding:"40px", overflowY:"auto" }}>
-
-          <h1 style={{ fontSize:"24px", fontWeight:"800", margin:"0 0 4px" }}>مراقبة المنافسين 🔍</h1>
-          <p style={{ color:"#555", fontSize:"13px", margin:"0 0 24px" }}>أدخل المنتج والموقع في كل صف — ابحث في أي موقع تريده</p>
-
-          {/* Tabs */}
-          <div style={{ display:"flex", borderBottom:"1px solid #1e1e2e", marginBottom:"20px" }}>
-            {[
-              { k:"manual", l:"إدخال يدوي" },
-              { k:"excel",  l:"رفع Excel" },
-              { k:"results", l:`النتائج${compRows.some(r=>r.status==="done")?` (${compRows.filter(r=>r.status==="done").length})`:""}` }
-            ].map(t => (
-              <button key={t.k} onClick={() => setCompTab(t.k as any)}
-                style={{ padding:"9px 20px", background:"none", border:"none", borderBottom:compTab===t.k?"2px solid #c8b8ff":"2px solid transparent", color:compTab===t.k?"#c8b8ff":"#555", fontSize:"14px", fontWeight:compTab===t.k?"700":"400", cursor:"pointer", fontFamily:"inherit", marginBottom:"-1px" }}>
-                {t.l}
-              </button>
-            ))}
-          </div>
-
-          {/* ── MANUAL TAB ── */}
-          {compTab === "manual" && (
-            <div>
-              {/* Table header */}
-              <div style={{ display:"grid", gridTemplateColumns:"140px 1fr 180px 32px", gap:"8px", padding:"0 4px 8px", fontSize:"12px", color:"#555", fontWeight:"600" }}>
-                <span>SKU</span>
-                <span>اسم المنتج للبحث *</span>
-                <span>الموقع (مثال: noon.com)</span>
-                <span></span>
-              </div>
-
-              <div style={{ display:"flex", flexDirection:"column", gap:"6px", marginBottom:"14px" }}>
-                {compRows.map((row, idx) => (
-                  <div key={row.id} style={{ display:"grid", gridTemplateColumns:"140px 1fr 180px 32px", gap:"8px", background:"#111118", border:"1px solid #1e1e2e", borderRadius:"10px", padding:"9px 12px", alignItems:"center" }}>
-                    <input value={row.sku} onChange={e => compUpdateRow(row.id, "sku", e.target.value)}
-                      placeholder={`SKU-${idx+1}`}
-                      style={{ ...inputStyle, padding:"7px 10px", fontSize:"12px", fontFamily:"monospace" }} />
-                    <input value={row.query} onChange={e => compUpdateRow(row.id, "query", e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && compSearchRow(row.id)}
-                      placeholder="مثال: سرير، طاولة رخام..."
-                      style={{ ...inputStyle, padding:"7px 10px", fontSize:"13px" }} />
-                    <input value={(row as any).site || ""} onChange={e => compUpdateRow(row.id, "site" as any, e.target.value)}
-                      placeholder="noon.com أو homecenter.com.sa"
-                      style={{ ...inputStyle, padding:"7px 10px", fontSize:"12px", direction:"ltr", textAlign:"left" }} />
-                    <button onClick={() => compRemoveRow(row.id)} disabled={compRows.length===1}
-                      style={{ width:30, height:30, background:"none", border:"1px solid #2a2a3e", borderRadius:"6px", color:"#555", cursor:compRows.length===1?"not-allowed":"pointer", fontSize:"13px", opacity:compRows.length===1?0.3:1 }}>✕</button>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display:"flex", gap:"8px", marginBottom:"24px", flexWrap:"wrap" }}>
-                <button onClick={compAddRow} style={{ padding:"9px 16px", background:"#111118", border:"1px solid #2a2a3e", borderRadius:"10px", color:"#c8b8ff", fontSize:"13px", cursor:"pointer", fontFamily:"inherit" }}>+ صف</button>
-                <button onClick={compSearchAll} disabled={compSearching || !compRows.some(r => r.query.trim())}
-                  style={{ padding:"9px 22px", background:compSearching||!compRows.some(r=>r.query.trim())?"#2a2a3e":"#c8b8ff", color:compSearching||!compRows.some(r=>r.query.trim())?"#888":"#0a0a0f", border:"none", borderRadius:"10px", fontSize:"14px", fontWeight:"700", cursor:compSearching||!compRows.some(r=>r.query.trim())?"not-allowed":"pointer", fontFamily:"inherit" }}>
-                  {compSearching?`جاري... (${compRows.filter(r=>r.status==="done").length}/${compRows.filter(r=>r.query.trim()).length})`:`ابدأ البحث ←`}
-                </button>
-                {compRows.some(r=>r.status==="done") && (
-                  <button onClick={compExportExcel} style={{ padding:"9px 16px", background:"#111118", border:"1px solid #1e3a2e", borderRadius:"10px", color:"#80ffdb", fontSize:"13px", cursor:"pointer", fontFamily:"inherit" }}>تصدير Excel ↓</button>
-                )}
-              </div>
-
-              {/* نتائج inline */}
-              {compRows.filter(r=>r.status!=="idle").map(row => (
-                <div key={row.id} style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"14px", marginBottom:"10px", overflow:"hidden" }}>
-                  <div style={{ padding:"11px 16px", borderBottom:"1px solid #1e1e2e", display:"flex", alignItems:"center", gap:"10px" }}>
-                    <div style={{ width:7, height:7, borderRadius:"50%", flexShrink:0, background:row.status==="searching"?"#ffd166":row.status==="done"?"#4ade80":"#ff6b6b", animation:row.status==="searching"?"pulse 1s infinite":"none" }} />
-                    <span style={{ fontSize:"14px", fontWeight:"700", color:"#c8b8ff" }}>{row.query}</span>
-                    {row.sku && <span style={{ fontSize:"10px", color:"#555", fontFamily:"monospace", background:"#0a0a0f", padding:"2px 5px", borderRadius:"3px" }}>{row.sku}</span>}
-                    {(row as any).site && <span style={{ fontSize:"11px", color:"#555", direction:"ltr" }}>{(row as any).site}</span>}
-                    <span style={{ marginRight:"auto", fontSize:"11px", color:"#555" }}>
-                      {row.status==="searching"&&"جاري البحث..."}
-                      {row.status==="done"&&`${row.results.filter(r=>r.title).length} نتيجة`}
-                      {row.status==="error"&&<span style={{color:"#ff6b6b"}}>خطأ</span>}
-                    </span>
-                    <button onClick={()=>compSearchRow(row.id)} disabled={row.status==="searching"}
-                      style={{ padding:"3px 9px", background:"none", border:"1px solid #2a2a3e", borderRadius:"5px", color:"#888", cursor:"pointer", fontSize:"11px", fontFamily:"inherit" }}>↻</button>
-                  </div>
-                  {row.status==="done" && row.results.map((r,i) => (
-                    <div key={i} style={{ display:"grid", gridTemplateColumns:"110px 1fr 120px 90px 65px", alignItems:"center", padding:"9px 16px", borderBottom:"1px solid #141420", gap:"10px", background:i%2?"#0d0d14":"transparent" }}>
-                      <span style={{ fontSize:"11px", padding:"3px 8px", background:"#1a1a2e", color:"#c8b8ff", borderRadius:"6px", textAlign:"center", fontWeight:"600", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.competitor}</span>
-                      <span style={{ fontSize:"12px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:r.title?"#e8e8f0":"#555" }}>{r.title||r.error||"—"}</span>
-                      <span style={{ fontSize:"13px", fontWeight:"700", color:r.price?"#c8b8ff":"#555" }}>{r.price?`${r.price.toLocaleString()} ${r.currency}`:"—"}</span>
-                      <span style={{ display:"inline-flex", alignItems:"center", gap:"4px", padding:"2px 8px", borderRadius:"20px", fontSize:"11px", background:r.available===true?"#0d1f0d":r.available===false?"#1f0d0d":"#1a1a2e", color:r.available===true?"#4ade80":r.available===false?"#f87171":"#555", border:`1px solid ${r.available===true?"#1a3a1a":r.available===false?"#3a1a1a":"#2a2a3e"}` }}>
-                        <span style={{ width:4, height:4, borderRadius:"50%", background:"currentColor" }} />
-                        {r.available===true?"متوفر":r.available===false?"غير متوفر":"—"}
-                      </span>
-                      {r.link?<a href={r.link} target="_blank" rel="noopener noreferrer" style={{ fontSize:"12px", color:"#7c6af7", textDecoration:"none" }}>فتح ↗</a>:<span style={{color:"#333",fontSize:"12px"}}>—</span>}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── EXCEL TAB ── */}
-          {compTab === "excel" && (
-            <div>
-              {!compExcelFile ? (
-                <div onClick={()=>compExcelRef.current?.click()} style={{ border:"2px dashed #2a2a3e", borderRadius:"16px", padding:"56px", textAlign:"center", cursor:"pointer", background:"#111118" }}>
-                  <input ref={compExcelRef} type="file" accept=".xlsx,.xls" onChange={compHandleExcel} style={{ display:"none" }} />
-                  <div style={{ fontSize:"36px", marginBottom:"10px" }}>📊</div>
-                  <div style={{ fontSize:"14px", color:"#c8b8ff", marginBottom:"4px" }}>اضغط لرفع ملف Excel</div>
-                  <div style={{ fontSize:"12px", color:"#555" }}>يكتشف عمود SKU والاسم تلقائياً | أول 50 منتج</div>
-                </div>
-              ) : (
-                <div>
-                  <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"12px", padding:"12px 16px", display:"flex", alignItems:"center", gap:"10px", marginBottom:"14px", flexWrap:"wrap" }}>
-                    <span style={{ fontSize:"18px" }}>📄</span>
-                    <span style={{ fontSize:"13px", color:"#c8b8ff" }}>{compExcelFile}</span>
-                    <span style={{ fontSize:"12px", color:"#555" }}>{compRows.length} منتج</span>
-                    <div style={{ marginRight:"auto", display:"flex", gap:"8px", alignItems:"center" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
-                        <span style={{ fontSize:"11px", color:"#666" }}>SKU:</span>
-                        <select value={compSkuCol} onChange={e=>{setCompSkuCol(e.target.value);setCompRows(compExcelRows.slice(0,50).map((r:any)=>({id:Math.random().toString(36).slice(2),sku:String(r[e.target.value]||"").trim(),query:String(r[compNameCol]||"").trim(),site:"",status:"idle" as const,results:[]})).filter((r:any)=>r.query));}}
-                          style={{...inputStyle,width:"auto",padding:"4px 8px",fontSize:"12px"}}>
-                          {compExcelCols.map(c=><option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
-                        <span style={{ fontSize:"11px", color:"#666" }}>الاسم:</span>
-                        <select value={compNameCol} onChange={e=>{setCompNameCol(e.target.value);setCompRows(compExcelRows.slice(0,50).map((r:any)=>({id:Math.random().toString(36).slice(2),sku:String(r[compSkuCol]||"").trim(),query:String(r[e.target.value]||"").trim(),site:"",status:"idle" as const,results:[]})).filter((r:any)=>r.query));}}
-                          style={{...inputStyle,width:"auto",padding:"4px 8px",fontSize:"12px"}}>
-                          {compExcelCols.map(c=><option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <button onClick={()=>{setCompExcelFile("");setCompExcelRows([]);setCompRows([{id:"1",sku:"",query:"",status:"idle",results:[]}]);}} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:"13px"}}>✕</button>
-                    </div>
-                  </div>
-                  <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"10px", overflow:"hidden", marginBottom:"14px" }}>
-                    <div style={{ padding:"9px 14px", borderBottom:"1px solid #1e1e2e", fontSize:"11px", color:"#555", fontWeight:"600" }}>معاينة</div>
-                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
-                      <thead><tr style={{background:"#0a0a0f"}}>
-                        <th style={{padding:"7px 12px",textAlign:"right",color:"#555",borderBottom:"1px solid #1e1e2e",fontWeight:"500"}}>SKU</th>
-                        <th style={{padding:"7px 12px",textAlign:"right",color:"#555",borderBottom:"1px solid #1e1e2e",fontWeight:"500"}}>اسم المنتج</th>
-                      </tr></thead>
-                      <tbody>
-                        {compRows.slice(0,4).map((row,i)=>(<tr key={i} style={{borderBottom:"1px solid #141420"}}><td style={{padding:"7px 12px",color:"#c8b8ff",fontFamily:"monospace",fontSize:"11px"}}>{row.sku||"—"}</td><td style={{padding:"7px 12px"}}>{row.query}</td></tr>))}
-                        {compRows.length>4&&<tr><td colSpan={2} style={{padding:"7px 12px",color:"#555",fontStyle:"italic"}}>... و {compRows.length-4} منتج آخر</td></tr>}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"10px", padding:"12px 14px", marginBottom:"14px" }}>
-                    <p style={{ fontSize:"12px", color:"#888", margin:"0 0 8px", fontWeight:"600" }}>موقع البحث لكل المنتجات (اختياري)</p>
-                    <input placeholder="مثال: noon.com أو homecenter.com.sa"
-                      onChange={e => setCompRows(p => p.map(r => ({...r, site: e.target.value} as any)))}
-                      style={{ ...inputStyle, direction:"ltr", textAlign:"left", fontSize:"13px" }} />
-                    <p style={{ fontSize:"11px", color:"#555", margin:"6px 0 0" }}>اتركه فارغاً للبحث في Homecenter وNoon تلقائياً</p>
-                  </div>
-                  <div style={{ display:"flex", gap:"8px" }}>
-                    <button onClick={compSearchAll} disabled={compSearching}
-                      style={{ padding:"11px 26px", background:compSearching?"#2a2a3e":"#c8b8ff", color:compSearching?"#888":"#0a0a0f", border:"none", borderRadius:"10px", fontSize:"14px", fontWeight:"700", cursor:compSearching?"not-allowed":"pointer", fontFamily:"inherit" }}>
-                      {compSearching?`جاري... (${compRows.filter(r=>r.status==="done").length}/${compRows.length})`:`ابدأ البحث في ${compRows.length} منتج ←`}
-                    </button>
-                    {compRows.some(r=>r.status==="done")&&(<button onClick={()=>setCompTab("results")} style={{padding:"11px 18px",background:"#111118",border:"1px solid #2a2a4e",borderRadius:"10px",color:"#c8b8ff",fontSize:"13px",cursor:"pointer",fontFamily:"inherit"}}>النتائج →</button>)}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── RESULTS TAB ── */}
-          {compTab === "results" && (
-            <div>
-              {!compRows.some(r=>r.status==="done") ? (
-                <div style={{ background:"#111118", border:"1px dashed #2a2a3e", borderRadius:"14px", padding:"56px", textAlign:"center" }}>
-                  <div style={{fontSize:"32px",marginBottom:"10px"}}>📋</div>
-                  <p style={{color:"#555",fontSize:"13px"}}>لا توجد نتائج — ابدأ بحثاً أولاً</p>
-                </div>
-              ) : (
-                <div>
-                  <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"14px", flexWrap:"wrap" }}>
-                    <span style={{fontSize:"13px",color:"#888"}}>{compRows.filter(r=>r.status==="done").length} منتج</span>
-                    <span style={{padding:"3px 10px",background:"#0d1f0d",color:"#4ade80",borderRadius:"20px",fontSize:"11px",border:"1px solid #1a3a1a"}}>{compRows.filter(r=>r.results.some(x=>x.available===true)).length} متوفر</span>
-                    <span style={{padding:"3px 10px",background:"#1f0d0d",color:"#f87171",borderRadius:"20px",fontSize:"11px",border:"1px solid #3a1a1a"}}>{compRows.filter(r=>r.status==="done"&&r.results.every(x=>!x.title)).length} غير موجود</span>
-                    <button onClick={compExportExcel} style={{marginRight:"auto",padding:"7px 14px",background:"#1a1a2e",border:"1px solid #1e3a2e",borderRadius:"8px",color:"#80ffdb",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>تصدير Excel ↓</button>
-                  </div>
-                  <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"14px", overflow:"hidden" }}>
-                    <div style={{overflowX:"auto"}}>
-                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px",minWidth:"700px"}}>
-                        <thead><tr style={{background:"#0a0a0f"}}>
-                          {["SKU","المنتج","الموقع","الاسم عندهم","السعر","التوفر","رابط"].map(h=>(<th key={h} style={{padding:"9px 12px",textAlign:"right",color:"#555",fontWeight:"500",borderBottom:"1px solid #1e1e2e"}}>{h}</th>))}
-                        </tr></thead>
-                        <tbody>
-                          {compRows.filter(r=>r.status==="done").flatMap(row=>
-                            row.results.length===0
-                              ?[<tr key={row.id+"-e"} style={{borderBottom:"1px solid #141420"}}><td style={{padding:"9px 12px",color:"#c8b8ff",fontFamily:"monospace",fontSize:"11px"}}>{row.sku||"—"}</td><td style={{padding:"9px 12px",maxWidth:"150px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.query}</td><td colSpan={5} style={{padding:"9px 12px",color:"#555",fontSize:"12px"}}>لا نتائج</td></tr>]
-                              :row.results.map((r,i)=>(
-                                <tr key={row.id+"-"+i} style={{borderBottom:"1px solid #141420",background:i%2?"#0d0d14":"transparent"}}>
-                                  <td style={{padding:"9px 12px",color:"#c8b8ff",fontFamily:"monospace",fontSize:"11px"}}>{row.sku||"—"}</td>
-                                  <td style={{padding:"9px 12px",maxWidth:"140px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.query}</td>
-                                  <td style={{padding:"9px 12px"}}><span style={{fontSize:"11px",padding:"2px 8px",background:"#1a1a2e",color:"#c8b8ff",borderRadius:"6px",fontWeight:"600"}}>{r.competitor}</span></td>
-                                  <td style={{padding:"9px 12px",maxWidth:"180px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.title||"—"}</td>
-                                  <td style={{padding:"9px 12px",color:"#c8b8ff",fontWeight:"600"}}>{r.price?`${r.price.toLocaleString()} ${r.currency}`:"—"}</td>
-                                  <td style={{padding:"9px 12px"}}><span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:"2px 8px",borderRadius:"20px",fontSize:"11px",background:r.available===true?"#0d1f0d":r.available===false?"#1f0d0d":"#1a1a2e",color:r.available===true?"#4ade80":r.available===false?"#f87171":"#555"}}><span style={{width:4,height:4,borderRadius:"50%",background:"currentColor"}}/>{r.available===true?"متوفر":r.available===false?"غير متوفر":"—"}</span></td>
-                                  <td style={{padding:"9px 12px"}}>{r.link?<a href={r.link} target="_blank" rel="noopener noreferrer" style={{color:"#7c6af7",fontSize:"12px",textDecoration:"none"}}>فتح ↗</a>:<span style={{color:"#333"}}>—</span>}</td>
-                                </tr>
-                              ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-        </div>
-      </div>
-    </div>
-  );
-
-    if (view === "dashboard") return (
-    <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-      <div style={{ display: "flex", minHeight: "100vh" }}>
-        {sidebarJSX}
-        <div style={{ flex: 1, padding: "40px" }}>
-          <h1 style={{ fontSize: "28px", fontWeight: "800", margin: "0 0 6px" }}>أهلاً، {user?.company} 👋</h1>
-          <p style={{ color: "#555", marginTop: "6px", fontSize: "14px", marginBottom: "32px" }}>هذه نظرة عامة على نشاطك</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "32px" }}>
-            {[{ label: "العمليات النشطة", value: "0", color: "#c8b8ff" }, { label: "التكاملات", value: "0", color: "#80ffdb" }, { label: "المهام المكتملة", value: "0", color: "#ffd166" }, { label: "التوفير في الوقت", value: "0h", color: "#ff6b6b" }].map(stat => (
-              <div key={stat.label} style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "16px", padding: "24px" }}>
-                <div style={{ fontSize: "28px", fontWeight: "900", color: stat.color }}>{stat.value}</div>
-                <div style={{ fontSize: "12px", color: "#555", marginTop: "6px" }}>{stat.label}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: "linear-gradient(135deg, #1a1a2e, #16213e)", border: "1px solid #2a2a4e", borderRadius: "20px", padding: "40px", textAlign: "center" }}>
-            <div style={{ fontSize: "48px", marginBottom: "16px" }}>🚀</div>
-            <h2 style={{ fontSize: "22px", fontWeight: "700", color: "#c8b8ff", margin: "0 0 12px" }}>مرحباً بك في وصال</h2>
-            <p style={{ color: "#666", fontSize: "14px", lineHeight: "1.8", maxWidth: "400px", margin: "0 auto 24px" }}>منصتك لأتمتة عمليات التجارة الإلكترونية.</p>
-            <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
-              <button onClick={() => setView("competitors")} style={{ background: "#c8b8ff", color: "#0a0a0f", border: "none", borderRadius: "12px", padding: "12px 24px", fontSize: "14px", fontWeight: "700", cursor: "pointer" }}>مراقبة المنافسين 🔍</button>
-              <button onClick={() => setView("inventory")} style={{ background: "#1a1a2e", color: "#c8b8ff", border: "1px solid #2a2a4e", borderRadius: "12px", padding: "12px 24px", fontSize: "14px", fontWeight: "700", cursor: "pointer" }}>مراقبة المخزون 📦</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ══════════════════════════════════════
-  // LOGIN / REGISTER
-  // ══════════════════════════════════════
-  if (view === "login" || view === "register") return (
-    <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-      <div style={{ width: "400px" }}>
-        <div style={{ textAlign: "center", marginBottom: "40px" }}>
-          <div style={{ fontSize: "36px", fontWeight: "900", color: "#c8b8ff" }}>وصال</div>
-          <p style={{ color: "#555", marginTop: "8px", fontSize: "14px" }}>{view === "login" ? "سجل دخولك للمتابعة" : "أنشئ حساباً جديداً"}</p>
-        </div>
-        <div style={{ background: "#111118", border: "1px solid #1e1e2e", borderRadius: "20px", padding: "32px" }}>
-          {view === "register" && (
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ fontSize: "13px", color: "#888", display: "block", marginBottom: "8px" }}>اسم الشركة</label>
-              <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="شركتي للتجارة"
-                style={{ width: "100%", padding: "12px 16px", background: "#0a0a0f", border: "1px solid #1e1e2e", borderRadius: "10px", color: "#e8e8f0", fontSize: "14px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
-            </div>
-          )}
-          <div style={{ marginBottom: "16px" }}>
-            <label style={{ fontSize: "13px", color: "#888", display: "block", marginBottom: "8px" }}>البريد الإلكتروني</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@company.com"
-              style={{ width: "100%", padding: "12px 16px", background: "#0a0a0f", border: "1px solid #1e1e2e", borderRadius: "10px", color: "#e8e8f0", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
-          </div>
-          <div style={{ marginBottom: "24px" }}>
-            <label style={{ fontSize: "13px", color: "#888", display: "block", marginBottom: "8px" }}>كلمة المرور</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
-              style={{ width: "100%", padding: "12px 16px", background: "#0a0a0f", border: "1px solid #1e1e2e", borderRadius: "10px", color: "#e8e8f0", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
-          </div>
-          {authError && <div style={{ color: "#ff6b6b", fontSize: "13px", marginBottom: "16px", textAlign: "center" }}>{authError}</div>}
-          <button onClick={view === "login" ? handleLogin : handleRegister} disabled={authLoading}
-            style={{ width: "100%", padding: "14px", background: "#c8b8ff", color: "#0a0a0f", border: "none", borderRadius: "12px", fontSize: "16px", fontWeight: "700", cursor: authLoading ? "not-allowed" : "pointer", opacity: authLoading ? 0.7 : 1 }}>
-            {authLoading ? "جاري التحميل..." : view === "login" ? "تسجيل الدخول" : "إنشاء حساب"}
-          </button>
-          <div style={{ textAlign: "center", marginTop: "20px", fontSize: "13px", color: "#555" }}>
-            {view === "login"
-              ? <span>ليس لديك حساب؟ <span style={{ color: "#c8b8ff", cursor: "pointer" }} onClick={() => setView("register")}>سجل الآن</span></span>
-              : <span>لديك حساب؟ <span style={{ color: "#c8b8ff", cursor: "pointer" }} onClick={() => setView("login")}>سجل دخولك</span></span>}
-          </div>
-        </div>
-        <div style={{ textAlign: "center", marginTop: "24px" }}>
-          <span style={{ color: "#555", fontSize: "13px", cursor: "pointer" }} onClick={() => setView("landing")}>← العودة للرئيسية</span>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ══════════════════════════════════════
-  // LANDING PAGE
-  // ══════════════════════════════════════
-  return (
-    <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", background: "#0a0a0f", color: "#e8e8f0", minHeight: "100vh" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-      <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 60px", borderBottom: "1px solid #1e1e2e" }}>
-        <div style={{ fontSize: "26px", fontWeight: "900", color: "#c8b8ff" }}>وصال</div>
-        <div style={{ display: "flex", gap: "12px" }}>
-          <button onClick={() => setView("login")} style={{ padding: "10px 24px", background: "transparent", border: "1px solid #2a2a4e", borderRadius: "10px", color: "#888", fontSize: "14px", cursor: "pointer" }}>دخول</button>
-          <button onClick={() => setView("register")} style={{ padding: "10px 24px", background: "#c8b8ff", border: "none", borderRadius: "10px", color: "#0a0a0f", fontSize: "14px", fontWeight: "700", cursor: "pointer" }}>ابدأ مجاناً</button>
-        </div>
-      </nav>
-      <div style={{ textAlign: "center", padding: "100px 60px 80px" }}>
-        <h1 style={{ fontSize: "64px", fontWeight: "900", lineHeight: "1.1", margin: "0 0 24px", letterSpacing: "-2px" }}>أتمتة عمليات<br /><span style={{ color: "#c8b8ff" }}>تجارتك الإلكترونية</span></h1>
-        <p style={{ fontSize: "18px", color: "#555", maxWidth: "500px", margin: "0 auto 40px", lineHeight: "1.8" }}>وصال يربط متاجرك، يدير طلباتك، ويشغّل AI agent يتصفح ويشتري بشكل تلقائي</p>
-        <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
-          <button onClick={() => setView("register")} style={{ padding: "16px 36px", background: "#c8b8ff", border: "none", borderRadius: "14px", color: "#0a0a0f", fontSize: "16px", fontWeight: "800", cursor: "pointer" }}>ابدأ مجاناً</button>
-          <button onClick={() => setView("login")} style={{ padding: "16px 36px", background: "transparent", border: "1px solid #2a2a4e", borderRadius: "14px", color: "#888", fontSize: "16px", cursor: "pointer" }}>تسجيل الدخول</button>
-        </div>
-      </div>
-      <div style={{ textAlign: "center", padding: "24px", borderTop: "1px solid #1e1e2e", color: "#333", fontSize: "12px" }}>© 2025 وصال — جميع الحقوق محفوظة</div>
-    </div>
-  );
-}
+@app.delete("/competitors/{key}")
+def remove_competitor(key: str):
+    if key not in COMPETITORS_CONFIG:
+        raise HTTPException(404, f"'{key}' غير موجود")
+    del COMPETITORS_CONFIG[key]
+    return {"status": "removed", "key": key}

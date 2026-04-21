@@ -334,7 +334,16 @@ export default function Home() {
     try {
       const res = await fetch(`${API_URL}/competitors/scan`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku: row.sku || row.query, query: row.query, competitor_keys: compSelectedSites, background: false, max_results: 3 })
+        body: JSON.stringify({
+          sku: row.sku || row.query,
+          query: row.query,
+          competitor_keys: (row as any).site
+            ? [(row as any).site.replace("https://","").replace("http://","").replace("www.","").split("/")[0].replace(/[^a-z0-9.]/gi,"_")]
+            : ["homecenter", "noon"],
+          background: false,
+          max_results: 3,
+          fetch_details: true,
+        })
       });
       const data = await res.json();
       const flat: CompResult[] = [];
@@ -947,268 +956,215 @@ export default function Home() {
         <div style={{ flex:1, padding:"40px", overflowY:"auto" }}>
 
           <h1 style={{ fontSize:"24px", fontWeight:"800", margin:"0 0 4px" }}>مراقبة المنافسين 🔍</h1>
-          <p style={{ color:"#555", fontSize:"13px", margin:"0 0 28px" }}>أضف المواقع ثم ابحث عن منتجاتك فيها</p>
+          <p style={{ color:"#555", fontSize:"13px", margin:"0 0 24px" }}>أدخل المنتج والموقع في كل صف — ابحث في أي موقع تريده</p>
 
-          <div style={{ display:"grid", gridTemplateColumns:"260px 1fr", gap:"24px", alignItems:"start" }}>
+          {/* Tabs */}
+          <div style={{ display:"flex", borderBottom:"1px solid #1e1e2e", marginBottom:"20px" }}>
+            {[
+              { k:"manual", l:"إدخال يدوي" },
+              { k:"excel",  l:"رفع Excel" },
+              { k:"results", l:`النتائج${compRows.some(r=>r.status==="done")?` (${compRows.filter(r=>r.status==="done").length})`:""}` }
+            ].map(t => (
+              <button key={t.k} onClick={() => setCompTab(t.k as any)}
+                style={{ padding:"9px 20px", background:"none", border:"none", borderBottom:compTab===t.k?"2px solid #c8b8ff":"2px solid transparent", color:compTab===t.k?"#c8b8ff":"#555", fontSize:"14px", fontWeight:compTab===t.k?"700":"400", cursor:"pointer", fontFamily:"inherit", marginBottom:"-1px" }}>
+                {t.l}
+              </button>
+            ))}
+          </div>
 
-            {/* ── يسار: المواقع ── */}
+          {/* ── MANUAL TAB ── */}
+          {compTab === "manual" && (
             <div>
-              <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"16px", padding:"18px", marginBottom:"12px" }}>
-                <p style={{ margin:"0 0 12px", fontSize:"13px", color:"#888", fontWeight:"600" }}>إضافة موقع منافس</p>
-                <input value={compNewSiteName} onChange={e => setCompNewSiteName(e.target.value)}
-                  placeholder="اسم الموقع (مثال: أوتاث)"
-                  style={{ ...inputStyle, marginBottom:"8px" }} />
-                <input value={compNewSiteUrl} onChange={e => setCompNewSiteUrl(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && compAddSite()}
-                  placeholder="www.otath.com"
-                  style={{ ...inputStyle, marginBottom:"10px", direction:"ltr", textAlign:"left" }} />
-                <button onClick={compAddSite} style={{ width:"100%", padding:"10px", background:"#c8b8ff", color:"#0a0a0f", border:"none", borderRadius:"8px", fontSize:"13px", fontWeight:"700", cursor:"pointer", fontFamily:"inherit" }}>+ إضافة</button>
+              {/* Table header */}
+              <div style={{ display:"grid", gridTemplateColumns:"140px 1fr 180px 32px", gap:"8px", padding:"0 4px 8px", fontSize:"12px", color:"#555", fontWeight:"600" }}>
+                <span>SKU</span>
+                <span>اسم المنتج للبحث *</span>
+                <span>الموقع (مثال: noon.com)</span>
+                <span></span>
               </div>
 
-              {compSites.length > 0 && (
-                <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"16px", overflow:"hidden" }}>
-                  <div style={{ padding:"12px 16px", borderBottom:"1px solid #1e1e2e", fontSize:"11px", color:"#555", fontWeight:"600" }}>المواقع ({compSites.length})</div>
-                  {compSites.map(s => (
-                    <div key={s.id} style={{ display:"flex", alignItems:"center", padding:"12px 16px", borderBottom:"1px solid #141420", gap:"8px" }}>
-                      <div style={{ width:7, height:7, borderRadius:"50%", background:"#4ade80", flexShrink:0 }} />
-                      <div style={{ flex:1, overflow:"hidden" }}>
-                        <div style={{ fontSize:"13px", fontWeight:"500" }}>{s.name}</div>
-                        <div style={{ fontSize:"11px", color:"#555", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", direction:"ltr", textAlign:"left" }}>{s.url}</div>
-                      </div>
-                      <button onClick={() => compRemoveSite(s.id)} style={{ background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:"13px" }}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* ── يمين: المنتجات + نتائج ── */}
-            <div>
-              {/* Tabs */}
-              <div style={{ display:"flex", borderBottom:"1px solid #1e1e2e", marginBottom:"20px" }}>
-                {[
-                  { k:"manual", l:"إدخال يدوي" },
-                  { k:"excel",  l:"رفع Excel" },
-                  { k:"results", l:`النتائج${compRows.some(r=>r.status==="done")?` (${compRows.filter(r=>r.status==="done").length})`:""}` }
-                ].map(t => (
-                  <button key={t.k} onClick={() => setCompTab(t.k as any)}
-                    style={{ padding:"9px 20px", background:"none", border:"none", borderBottom:compTab===t.k?"2px solid #c8b8ff":"2px solid transparent", color:compTab===t.k?"#c8b8ff":"#555", fontSize:"14px", fontWeight:compTab===t.k?"700":"400", cursor:"pointer", fontFamily:"inherit", marginBottom:"-1px" }}>
-                    {t.l}
-                  </button>
+              <div style={{ display:"flex", flexDirection:"column", gap:"6px", marginBottom:"14px" }}>
+                {compRows.map((row, idx) => (
+                  <div key={row.id} style={{ display:"grid", gridTemplateColumns:"140px 1fr 180px 32px", gap:"8px", background:"#111118", border:"1px solid #1e1e2e", borderRadius:"10px", padding:"9px 12px", alignItems:"center" }}>
+                    <input value={row.sku} onChange={e => compUpdateRow(row.id, "sku", e.target.value)}
+                      placeholder={`SKU-${idx+1}`}
+                      style={{ ...inputStyle, padding:"7px 10px", fontSize:"12px", fontFamily:"monospace" }} />
+                    <input value={row.query} onChange={e => compUpdateRow(row.id, "query", e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && compSearchRow(row.id)}
+                      placeholder="مثال: سرير، طاولة رخام..."
+                      style={{ ...inputStyle, padding:"7px 10px", fontSize:"13px" }} />
+                    <input value={(row as any).site || ""} onChange={e => compUpdateRow(row.id, "site" as any, e.target.value)}
+                      placeholder="noon.com أو homecenter.com.sa"
+                      style={{ ...inputStyle, padding:"7px 10px", fontSize:"12px", direction:"ltr", textAlign:"left" }} />
+                    <button onClick={() => compRemoveRow(row.id)} disabled={compRows.length===1}
+                      style={{ width:30, height:30, background:"none", border:"1px solid #2a2a3e", borderRadius:"6px", color:"#555", cursor:compRows.length===1?"not-allowed":"pointer", fontSize:"13px", opacity:compRows.length===1?0.3:1 }}>✕</button>
+                  </div>
                 ))}
               </div>
 
-              {compSites.length === 0 && (
-                <div style={{ background:"#1a0a0a", border:"1px solid #3a1a1a", borderRadius:"10px", padding:"12px 16px", fontSize:"13px", color:"#f87171", marginBottom:"16px" }}>
-                  ⚠️ أضف موقعاً واحداً على الأقل من القائمة على اليسار
-                </div>
-              )}
+              <div style={{ display:"flex", gap:"8px", marginBottom:"24px", flexWrap:"wrap" }}>
+                <button onClick={compAddRow} style={{ padding:"9px 16px", background:"#111118", border:"1px solid #2a2a3e", borderRadius:"10px", color:"#c8b8ff", fontSize:"13px", cursor:"pointer", fontFamily:"inherit" }}>+ صف</button>
+                <button onClick={compSearchAll} disabled={compSearching || !compRows.some(r => r.query.trim())}
+                  style={{ padding:"9px 22px", background:compSearching||!compRows.some(r=>r.query.trim())?"#2a2a3e":"#c8b8ff", color:compSearching||!compRows.some(r=>r.query.trim())?"#888":"#0a0a0f", border:"none", borderRadius:"10px", fontSize:"14px", fontWeight:"700", cursor:compSearching||!compRows.some(r=>r.query.trim())?"not-allowed":"pointer", fontFamily:"inherit" }}>
+                  {compSearching?`جاري... (${compRows.filter(r=>r.status==="done").length}/${compRows.filter(r=>r.query.trim()).length})`:`ابدأ البحث ←`}
+                </button>
+                {compRows.some(r=>r.status==="done") && (
+                  <button onClick={compExportExcel} style={{ padding:"9px 16px", background:"#111118", border:"1px solid #1e3a2e", borderRadius:"10px", color:"#80ffdb", fontSize:"13px", cursor:"pointer", fontFamily:"inherit" }}>تصدير Excel ↓</button>
+                )}
+              </div>
 
-              {/* ── MANUAL TAB ── */}
-              {compTab === "manual" && (
-                <div>
-                  <div style={{ display:"grid", gridTemplateColumns:"150px 1fr 32px", gap:"8px", padding:"0 4px 8px", fontSize:"12px", color:"#555", fontWeight:"600" }}>
-                    <span>SKU</span><span>اسم المنتج للبحث *</span><span></span>
+              {/* نتائج inline */}
+              {compRows.filter(r=>r.status!=="idle").map(row => (
+                <div key={row.id} style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"14px", marginBottom:"10px", overflow:"hidden" }}>
+                  <div style={{ padding:"11px 16px", borderBottom:"1px solid #1e1e2e", display:"flex", alignItems:"center", gap:"10px" }}>
+                    <div style={{ width:7, height:7, borderRadius:"50%", flexShrink:0, background:row.status==="searching"?"#ffd166":row.status==="done"?"#4ade80":"#ff6b6b", animation:row.status==="searching"?"pulse 1s infinite":"none" }} />
+                    <span style={{ fontSize:"14px", fontWeight:"700", color:"#c8b8ff" }}>{row.query}</span>
+                    {row.sku && <span style={{ fontSize:"10px", color:"#555", fontFamily:"monospace", background:"#0a0a0f", padding:"2px 5px", borderRadius:"3px" }}>{row.sku}</span>}
+                    {(row as any).site && <span style={{ fontSize:"11px", color:"#555", direction:"ltr" }}>{(row as any).site}</span>}
+                    <span style={{ marginRight:"auto", fontSize:"11px", color:"#555" }}>
+                      {row.status==="searching"&&"جاري البحث..."}
+                      {row.status==="done"&&`${row.results.filter(r=>r.title).length} نتيجة`}
+                      {row.status==="error"&&<span style={{color:"#ff6b6b"}}>خطأ</span>}
+                    </span>
+                    <button onClick={()=>compSearchRow(row.id)} disabled={row.status==="searching"}
+                      style={{ padding:"3px 9px", background:"none", border:"1px solid #2a2a3e", borderRadius:"5px", color:"#888", cursor:"pointer", fontSize:"11px", fontFamily:"inherit" }}>↻</button>
                   </div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:"6px", marginBottom:"14px" }}>
-                    {compRows.map((row, idx) => (
-                      <div key={row.id} style={{ display:"grid", gridTemplateColumns:"150px 1fr 32px", gap:"8px", background:"#111118", border:"1px solid #1e1e2e", borderRadius:"10px", padding:"9px 12px", alignItems:"center" }}>
-                        <input value={row.sku} onChange={e => compUpdateRow(row.id, "sku", e.target.value)}
-                          placeholder={`SKU-${idx+1}`}
-                          style={{ ...inputStyle, padding:"7px 10px", fontSize:"12px", fontFamily:"monospace" }} />
-                        <input value={row.query} onChange={e => compUpdateRow(row.id, "query", e.target.value)}
-                          onKeyDown={e => e.key === "Enter" && compSearchRow(row.id)}
-                          placeholder="مثال: سرير، طاولة رخام..."
-                          style={{ ...inputStyle, padding:"7px 10px", fontSize:"13px" }} />
-                        <button onClick={() => compRemoveRow(row.id)} disabled={compRows.length===1}
-                          style={{ width:30, height:30, background:"none", border:"1px solid #2a2a3e", borderRadius:"6px", color:"#555", cursor:compRows.length===1?"not-allowed":"pointer", fontSize:"13px", opacity:compRows.length===1?0.3:1 }}>✕</button>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ display:"flex", gap:"8px", marginBottom:"24px", flexWrap:"wrap" }}>
-                    <button onClick={compAddRow} style={{ padding:"9px 16px", background:"#111118", border:"1px solid #2a2a3e", borderRadius:"10px", color:"#c8b8ff", fontSize:"13px", cursor:"pointer", fontFamily:"inherit" }}>+ صف</button>
-                    <button onClick={compSearchAll} disabled={compSearching||compSites.length===0||!compRows.some(r=>r.query.trim())}
-                      style={{ padding:"9px 22px", background:compSearching||compSites.length===0?"#2a2a3e":"#c8b8ff", color:compSearching||compSites.length===0?"#888":"#0a0a0f", border:"none", borderRadius:"10px", fontSize:"14px", fontWeight:"700", cursor:compSearching||compSites.length===0?"not-allowed":"pointer", fontFamily:"inherit" }}>
-                      {compSearching?`جاري... (${compRows.filter(r=>r.status==="done").length}/${compRows.filter(r=>r.query.trim()).length})`:`ابدأ البحث ←`}
-                    </button>
-                    {compRows.some(r=>r.status==="done") && (
-                      <button onClick={compExportExcel} style={{ padding:"9px 16px", background:"#111118", border:"1px solid #1e3a2e", borderRadius:"10px", color:"#80ffdb", fontSize:"13px", cursor:"pointer", fontFamily:"inherit" }}>تصدير Excel ↓</button>
-                    )}
-                  </div>
-
-                  {/* نتائج inline */}
-                  {compRows.filter(r=>r.status!=="idle").map(row => (
-                    <div key={row.id} style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"14px", marginBottom:"10px", overflow:"hidden" }}>
-                      <div style={{ padding:"11px 16px", borderBottom:"1px solid #1e1e2e", display:"flex", alignItems:"center", gap:"10px" }}>
-                        <div style={{ width:7, height:7, borderRadius:"50%", flexShrink:0, background:row.status==="searching"?"#ffd166":row.status==="done"?"#4ade80":"#ff6b6b", animation:row.status==="searching"?"pulse 1s infinite":"none" }} />
-                        <span style={{ fontSize:"14px", fontWeight:"700", color:"#c8b8ff" }}>{row.query}</span>
-                        {row.sku && <span style={{ fontSize:"10px", color:"#555", fontFamily:"monospace", background:"#0a0a0f", padding:"2px 5px", borderRadius:"3px" }}>{row.sku}</span>}
-                        <span style={{ marginRight:"auto", fontSize:"11px", color:"#555" }}>
-                          {row.status==="searching"&&"جاري البحث..."}
-                          {row.status==="done"&&`${row.results.filter(r=>r.title).length} نتيجة`}
-                          {row.status==="error"&&<span style={{color:"#ff6b6b"}}>خطأ</span>}
-                        </span>
-                        <button onClick={()=>compSearchRow(row.id)} disabled={row.status==="searching"}
-                          style={{ padding:"3px 9px", background:"none", border:"1px solid #2a2a3e", borderRadius:"5px", color:"#888", cursor:"pointer", fontSize:"11px", fontFamily:"inherit" }}>↻</button>
-                      </div>
-                      {row.status==="done" && row.results.map((r,i) => (
-                        <div key={i} style={{ display:"grid", gridTemplateColumns:"110px 1fr 120px 90px 65px", alignItems:"center", padding:"9px 16px", borderBottom:"1px solid #141420", gap:"10px", background:i%2?"#0d0d14":"transparent" }}>
-                          <span style={{ fontSize:"11px", padding:"3px 8px", background:"#1a1a2e", color:"#c8b8ff", borderRadius:"6px", textAlign:"center", fontWeight:"600", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.competitor}</span>
-                          <span style={{ fontSize:"12px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:r.title?"#e8e8f0":"#555" }}>{r.title||r.error||"—"}</span>
-                          <span style={{ fontSize:"13px", fontWeight:"700", color:r.price?"#c8b8ff":"#555" }}>{r.price?`${r.price.toLocaleString()} ${r.currency}`:"—"}</span>
-                          <span style={{ display:"inline-flex", alignItems:"center", gap:"4px", padding:"2px 8px", borderRadius:"20px", fontSize:"11px", background:r.available===true?"#0d1f0d":r.available===false?"#1f0d0d":"#1a1a2e", color:r.available===true?"#4ade80":r.available===false?"#f87171":"#555", border:`1px solid ${r.available===true?"#1a3a1a":r.available===false?"#3a1a1a":"#2a2a3e"}` }}>
-                            <span style={{ width:4, height:4, borderRadius:"50%", background:"currentColor" }} />
-                            {r.available===true?"متوفر":r.available===false?"غير متوفر":"—"}
-                          </span>
-                          {r.link?<a href={r.link} target="_blank" rel="noopener noreferrer" style={{ fontSize:"12px", color:"#7c6af7", textDecoration:"none" }}>فتح ↗</a>:<span style={{color:"#333",fontSize:"12px"}}>—</span>}
-                        </div>
-                      ))}
+                  {row.status==="done" && row.results.map((r,i) => (
+                    <div key={i} style={{ display:"grid", gridTemplateColumns:"110px 1fr 120px 90px 65px", alignItems:"center", padding:"9px 16px", borderBottom:"1px solid #141420", gap:"10px", background:i%2?"#0d0d14":"transparent" }}>
+                      <span style={{ fontSize:"11px", padding:"3px 8px", background:"#1a1a2e", color:"#c8b8ff", borderRadius:"6px", textAlign:"center", fontWeight:"600", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.competitor}</span>
+                      <span style={{ fontSize:"12px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:r.title?"#e8e8f0":"#555" }}>{r.title||r.error||"—"}</span>
+                      <span style={{ fontSize:"13px", fontWeight:"700", color:r.price?"#c8b8ff":"#555" }}>{r.price?`${r.price.toLocaleString()} ${r.currency}`:"—"}</span>
+                      <span style={{ display:"inline-flex", alignItems:"center", gap:"4px", padding:"2px 8px", borderRadius:"20px", fontSize:"11px", background:r.available===true?"#0d1f0d":r.available===false?"#1f0d0d":"#1a1a2e", color:r.available===true?"#4ade80":r.available===false?"#f87171":"#555", border:`1px solid ${r.available===true?"#1a3a1a":r.available===false?"#3a1a1a":"#2a2a3e"}` }}>
+                        <span style={{ width:4, height:4, borderRadius:"50%", background:"currentColor" }} />
+                        {r.available===true?"متوفر":r.available===false?"غير متوفر":"—"}
+                      </span>
+                      {r.link?<a href={r.link} target="_blank" rel="noopener noreferrer" style={{ fontSize:"12px", color:"#7c6af7", textDecoration:"none" }}>فتح ↗</a>:<span style={{color:"#333",fontSize:"12px"}}>—</span>}
                     </div>
                   ))}
                 </div>
-              )}
-
-              {/* ── EXCEL TAB ── */}
-              {compTab === "excel" && (
-                <div>
-                  {!compExcelFile ? (
-                    <div onClick={()=>compExcelRef.current?.click()} style={{ border:"2px dashed #2a2a3e", borderRadius:"16px", padding:"56px", textAlign:"center", cursor:"pointer", background:"#111118" }}>
-                      <input ref={compExcelRef} type="file" accept=".xlsx,.xls" onChange={compHandleExcel} style={{ display:"none" }} />
-                      <div style={{ fontSize:"36px", marginBottom:"10px" }}>📊</div>
-                      <div style={{ fontSize:"14px", color:"#c8b8ff", marginBottom:"4px" }}>اضغط لرفع ملف Excel</div>
-                      <div style={{ fontSize:"12px", color:"#555" }}>يكتشف عمود SKU والاسم تلقائياً | أول 50 منتج</div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"12px", padding:"12px 16px", display:"flex", alignItems:"center", gap:"10px", marginBottom:"14px", flexWrap:"wrap" }}>
-                        <span style={{ fontSize:"18px" }}>📄</span>
-                        <span style={{ fontSize:"13px", color:"#c8b8ff" }}>{compExcelFile}</span>
-                        <span style={{ fontSize:"12px", color:"#555" }}>{compRows.length} منتج</span>
-                        <div style={{ marginRight:"auto", display:"flex", gap:"8px", alignItems:"center" }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
-                            <span style={{ fontSize:"11px", color:"#666" }}>SKU:</span>
-                            <select value={compSkuCol} onChange={e=>{setCompSkuCol(e.target.value);setCompRows(compExcelRows.slice(0,50).map((r:any)=>({id:Math.random().toString(36).slice(2),sku:String(r[e.target.value]||"").trim(),query:String(r[compNameCol]||"").trim(),status:"idle" as const,results:[]})).filter((r:any)=>r.query));}}
-                              style={{...inputStyle,width:"auto",padding:"4px 8px",fontSize:"12px"}}>
-                              {compExcelCols.map(c=><option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
-                          <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
-                            <span style={{ fontSize:"11px", color:"#666" }}>الاسم:</span>
-                            <select value={compNameCol} onChange={e=>{setCompNameCol(e.target.value);setCompRows(compExcelRows.slice(0,50).map((r:any)=>({id:Math.random().toString(36).slice(2),sku:String(r[compSkuCol]||"").trim(),query:String(r[e.target.value]||"").trim(),status:"idle" as const,results:[]})).filter((r:any)=>r.query));}}
-                              style={{...inputStyle,width:"auto",padding:"4px 8px",fontSize:"12px"}}>
-                              {compExcelCols.map(c=><option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
-                          <button onClick={()=>{setCompExcelFile("");setCompExcelRows([]);setCompRows([{id:"1",sku:"",query:"",status:"idle",results:[]}]);}} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:"13px"}}>✕</button>
-                        </div>
-                      </div>
-                      <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"10px", overflow:"hidden", marginBottom:"14px" }}>
-                        <div style={{ padding:"9px 14px", borderBottom:"1px solid #1e1e2e", fontSize:"11px", color:"#555", fontWeight:"600" }}>معاينة</div>
-                        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
-                          <thead><tr style={{background:"#0a0a0f"}}>
-                            <th style={{padding:"7px 12px",textAlign:"right",color:"#555",borderBottom:"1px solid #1e1e2e",fontWeight:"500"}}>SKU</th>
-                            <th style={{padding:"7px 12px",textAlign:"right",color:"#555",borderBottom:"1px solid #1e1e2e",fontWeight:"500"}}>اسم المنتج</th>
-                          </tr></thead>
-                          <tbody>
-                            {compRows.slice(0,4).map((row,i)=>(
-                              <tr key={i} style={{borderBottom:"1px solid #141420"}}>
-                                <td style={{padding:"7px 12px",color:"#c8b8ff",fontFamily:"monospace",fontSize:"11px"}}>{row.sku||"—"}</td>
-                                <td style={{padding:"7px 12px"}}>{row.query}</td>
-                              </tr>
-                            ))}
-                            {compRows.length>4&&<tr><td colSpan={2} style={{padding:"7px 12px",color:"#555",fontStyle:"italic"}}>... و {compRows.length-4} منتج آخر</td></tr>}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div style={{ display:"flex", gap:"8px" }}>
-                        <button onClick={compSearchAll} disabled={compSearching||compSites.length===0}
-                          style={{ padding:"11px 26px", background:compSearching||compSites.length===0?"#2a2a3e":"#c8b8ff", color:compSearching||compSites.length===0?"#888":"#0a0a0f", border:"none", borderRadius:"10px", fontSize:"14px", fontWeight:"700", cursor:compSearching||compSites.length===0?"not-allowed":"pointer", fontFamily:"inherit" }}>
-                          {compSearching?`جاري... (${compRows.filter(r=>r.status==="done").length}/${compRows.length})`:`ابدأ البحث في ${compRows.length} منتج ←`}
-                        </button>
-                        {compRows.some(r=>r.status==="done")&&(
-                          <button onClick={()=>setCompTab("results")} style={{padding:"11px 18px",background:"#111118",border:"1px solid #2a2a4e",borderRadius:"10px",color:"#c8b8ff",fontSize:"13px",cursor:"pointer",fontFamily:"inherit"}}>النتائج →</button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ── RESULTS TAB ── */}
-              {compTab === "results" && (
-                <div>
-                  {!compRows.some(r=>r.status==="done") ? (
-                    <div style={{ background:"#111118", border:"1px dashed #2a2a3e", borderRadius:"14px", padding:"56px", textAlign:"center" }}>
-                      <div style={{fontSize:"32px",marginBottom:"10px"}}>📋</div>
-                      <p style={{color:"#555",fontSize:"13px"}}>لا توجد نتائج — ابدأ بحثاً أولاً</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"14px", flexWrap:"wrap" }}>
-                        <span style={{fontSize:"13px",color:"#888"}}>{compRows.filter(r=>r.status==="done").length} منتج</span>
-                        <span style={{padding:"3px 10px",background:"#0d1f0d",color:"#4ade80",borderRadius:"20px",fontSize:"11px",border:"1px solid #1a3a1a"}}>
-                          {compRows.filter(r=>r.results.some(x=>x.available===true)).length} متوفر
-                        </span>
-                        <span style={{padding:"3px 10px",background:"#1f0d0d",color:"#f87171",borderRadius:"20px",fontSize:"11px",border:"1px solid #3a1a1a"}}>
-                          {compRows.filter(r=>r.status==="done"&&r.results.every(x=>!x.title)).length} غير موجود
-                        </span>
-                        <button onClick={compExportExcel} style={{marginRight:"auto",padding:"7px 14px",background:"#1a1a2e",border:"1px solid #1e3a2e",borderRadius:"8px",color:"#80ffdb",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>تصدير Excel ↓</button>
-                      </div>
-                      <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"14px", overflow:"hidden" }}>
-                        <div style={{overflowX:"auto"}}>
-                          <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px",minWidth:"700px"}}>
-                            <thead><tr style={{background:"#0a0a0f"}}>
-                              {["SKU","المنتج","الموقع","الاسم عندهم","السعر","التوفر","رابط"].map(h=>(
-                                <th key={h} style={{padding:"9px 12px",textAlign:"right",color:"#555",fontWeight:"500",borderBottom:"1px solid #1e1e2e"}}>{h}</th>
-                              ))}
-                            </tr></thead>
-                            <tbody>
-                              {compRows.filter(r=>r.status==="done").flatMap(row=>
-                                row.results.length===0
-                                  ?[<tr key={row.id+"-e"} style={{borderBottom:"1px solid #141420"}}>
-                                      <td style={{padding:"9px 12px",color:"#c8b8ff",fontFamily:"monospace",fontSize:"11px"}}>{row.sku||"—"}</td>
-                                      <td style={{padding:"9px 12px",maxWidth:"150px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.query}</td>
-                                      <td colSpan={5} style={{padding:"9px 12px",color:"#555",fontSize:"12px"}}>لا نتائج</td>
-                                    </tr>]
-                                  :row.results.map((r,i)=>(
-                                    <tr key={row.id+"-"+i} style={{borderBottom:"1px solid #141420",background:i%2?"#0d0d14":"transparent"}}>
-                                      <td style={{padding:"9px 12px",color:"#c8b8ff",fontFamily:"monospace",fontSize:"11px"}}>{row.sku||"—"}</td>
-                                      <td style={{padding:"9px 12px",maxWidth:"140px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.query}</td>
-                                      <td style={{padding:"9px 12px"}}>
-                                        <span style={{fontSize:"11px",padding:"2px 8px",background:"#1a1a2e",color:"#c8b8ff",borderRadius:"6px",fontWeight:"600"}}>{r.competitor}</span>
-                                      </td>
-                                      <td style={{padding:"9px 12px",maxWidth:"180px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.title||"—"}</td>
-                                      <td style={{padding:"9px 12px",color:"#c8b8ff",fontWeight:"600"}}>{r.price?`${r.price.toLocaleString()} ${r.currency}`:"—"}</td>
-                                      <td style={{padding:"9px 12px"}}>
-                                        <span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:"2px 8px",borderRadius:"20px",fontSize:"11px",background:r.available===true?"#0d1f0d":r.available===false?"#1f0d0d":"#1a1a2e",color:r.available===true?"#4ade80":r.available===false?"#f87171":"#555"}}>
-                                          <span style={{width:4,height:4,borderRadius:"50%",background:"currentColor"}} />
-                                          {r.available===true?"متوفر":r.available===false?"غير متوفر":"—"}
-                                        </span>
-                                      </td>
-                                      <td style={{padding:"9px 12px"}}>
-                                        {r.link?<a href={r.link} target="_blank" rel="noopener noreferrer" style={{color:"#7c6af7",fontSize:"12px",textDecoration:"none"}}>فتح ↗</a>:<span style={{color:"#333"}}>—</span>}
-                                      </td>
-                                    </tr>
-                                  ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
+              ))}
             </div>
-          </div>
+          )}
+
+          {/* ── EXCEL TAB ── */}
+          {compTab === "excel" && (
+            <div>
+              {!compExcelFile ? (
+                <div onClick={()=>compExcelRef.current?.click()} style={{ border:"2px dashed #2a2a3e", borderRadius:"16px", padding:"56px", textAlign:"center", cursor:"pointer", background:"#111118" }}>
+                  <input ref={compExcelRef} type="file" accept=".xlsx,.xls" onChange={compHandleExcel} style={{ display:"none" }} />
+                  <div style={{ fontSize:"36px", marginBottom:"10px" }}>📊</div>
+                  <div style={{ fontSize:"14px", color:"#c8b8ff", marginBottom:"4px" }}>اضغط لرفع ملف Excel</div>
+                  <div style={{ fontSize:"12px", color:"#555" }}>يكتشف عمود SKU والاسم تلقائياً | أول 50 منتج</div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"12px", padding:"12px 16px", display:"flex", alignItems:"center", gap:"10px", marginBottom:"14px", flexWrap:"wrap" }}>
+                    <span style={{ fontSize:"18px" }}>📄</span>
+                    <span style={{ fontSize:"13px", color:"#c8b8ff" }}>{compExcelFile}</span>
+                    <span style={{ fontSize:"12px", color:"#555" }}>{compRows.length} منتج</span>
+                    <div style={{ marginRight:"auto", display:"flex", gap:"8px", alignItems:"center" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
+                        <span style={{ fontSize:"11px", color:"#666" }}>SKU:</span>
+                        <select value={compSkuCol} onChange={e=>{setCompSkuCol(e.target.value);setCompRows(compExcelRows.slice(0,50).map((r:any)=>({id:Math.random().toString(36).slice(2),sku:String(r[e.target.value]||"").trim(),query:String(r[compNameCol]||"").trim(),site:"",status:"idle" as const,results:[]})).filter((r:any)=>r.query));}}
+                          style={{...inputStyle,width:"auto",padding:"4px 8px",fontSize:"12px"}}>
+                          {compExcelCols.map(c=><option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
+                        <span style={{ fontSize:"11px", color:"#666" }}>الاسم:</span>
+                        <select value={compNameCol} onChange={e=>{setCompNameCol(e.target.value);setCompRows(compExcelRows.slice(0,50).map((r:any)=>({id:Math.random().toString(36).slice(2),sku:String(r[compSkuCol]||"").trim(),query:String(r[e.target.value]||"").trim(),site:"",status:"idle" as const,results:[]})).filter((r:any)=>r.query));}}
+                          style={{...inputStyle,width:"auto",padding:"4px 8px",fontSize:"12px"}}>
+                          {compExcelCols.map(c=><option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <button onClick={()=>{setCompExcelFile("");setCompExcelRows([]);setCompRows([{id:"1",sku:"",query:"",status:"idle",results:[]}]);}} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:"13px"}}>✕</button>
+                    </div>
+                  </div>
+                  <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"10px", overflow:"hidden", marginBottom:"14px" }}>
+                    <div style={{ padding:"9px 14px", borderBottom:"1px solid #1e1e2e", fontSize:"11px", color:"#555", fontWeight:"600" }}>معاينة</div>
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+                      <thead><tr style={{background:"#0a0a0f"}}>
+                        <th style={{padding:"7px 12px",textAlign:"right",color:"#555",borderBottom:"1px solid #1e1e2e",fontWeight:"500"}}>SKU</th>
+                        <th style={{padding:"7px 12px",textAlign:"right",color:"#555",borderBottom:"1px solid #1e1e2e",fontWeight:"500"}}>اسم المنتج</th>
+                      </tr></thead>
+                      <tbody>
+                        {compRows.slice(0,4).map((row,i)=>(<tr key={i} style={{borderBottom:"1px solid #141420"}}><td style={{padding:"7px 12px",color:"#c8b8ff",fontFamily:"monospace",fontSize:"11px"}}>{row.sku||"—"}</td><td style={{padding:"7px 12px"}}>{row.query}</td></tr>))}
+                        {compRows.length>4&&<tr><td colSpan={2} style={{padding:"7px 12px",color:"#555",fontStyle:"italic"}}>... و {compRows.length-4} منتج آخر</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"10px", padding:"12px 14px", marginBottom:"14px" }}>
+                    <p style={{ fontSize:"12px", color:"#888", margin:"0 0 8px", fontWeight:"600" }}>موقع البحث لكل المنتجات (اختياري)</p>
+                    <input placeholder="مثال: noon.com أو homecenter.com.sa"
+                      onChange={e => setCompRows(p => p.map(r => ({...r, site: e.target.value} as any)))}
+                      style={{ ...inputStyle, direction:"ltr", textAlign:"left", fontSize:"13px" }} />
+                    <p style={{ fontSize:"11px", color:"#555", margin:"6px 0 0" }}>اتركه فارغاً للبحث في Homecenter وNoon تلقائياً</p>
+                  </div>
+                  <div style={{ display:"flex", gap:"8px" }}>
+                    <button onClick={compSearchAll} disabled={compSearching}
+                      style={{ padding:"11px 26px", background:compSearching?"#2a2a3e":"#c8b8ff", color:compSearching?"#888":"#0a0a0f", border:"none", borderRadius:"10px", fontSize:"14px", fontWeight:"700", cursor:compSearching?"not-allowed":"pointer", fontFamily:"inherit" }}>
+                      {compSearching?`جاري... (${compRows.filter(r=>r.status==="done").length}/${compRows.length})`:`ابدأ البحث في ${compRows.length} منتج ←`}
+                    </button>
+                    {compRows.some(r=>r.status==="done")&&(<button onClick={()=>setCompTab("results")} style={{padding:"11px 18px",background:"#111118",border:"1px solid #2a2a4e",borderRadius:"10px",color:"#c8b8ff",fontSize:"13px",cursor:"pointer",fontFamily:"inherit"}}>النتائج →</button>)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── RESULTS TAB ── */}
+          {compTab === "results" && (
+            <div>
+              {!compRows.some(r=>r.status==="done") ? (
+                <div style={{ background:"#111118", border:"1px dashed #2a2a3e", borderRadius:"14px", padding:"56px", textAlign:"center" }}>
+                  <div style={{fontSize:"32px",marginBottom:"10px"}}>📋</div>
+                  <p style={{color:"#555",fontSize:"13px"}}>لا توجد نتائج — ابدأ بحثاً أولاً</p>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"14px", flexWrap:"wrap" }}>
+                    <span style={{fontSize:"13px",color:"#888"}}>{compRows.filter(r=>r.status==="done").length} منتج</span>
+                    <span style={{padding:"3px 10px",background:"#0d1f0d",color:"#4ade80",borderRadius:"20px",fontSize:"11px",border:"1px solid #1a3a1a"}}>{compRows.filter(r=>r.results.some(x=>x.available===true)).length} متوفر</span>
+                    <span style={{padding:"3px 10px",background:"#1f0d0d",color:"#f87171",borderRadius:"20px",fontSize:"11px",border:"1px solid #3a1a1a"}}>{compRows.filter(r=>r.status==="done"&&r.results.every(x=>!x.title)).length} غير موجود</span>
+                    <button onClick={compExportExcel} style={{marginRight:"auto",padding:"7px 14px",background:"#1a1a2e",border:"1px solid #1e3a2e",borderRadius:"8px",color:"#80ffdb",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>تصدير Excel ↓</button>
+                  </div>
+                  <div style={{ background:"#111118", border:"1px solid #1e1e2e", borderRadius:"14px", overflow:"hidden" }}>
+                    <div style={{overflowX:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px",minWidth:"700px"}}>
+                        <thead><tr style={{background:"#0a0a0f"}}>
+                          {["SKU","المنتج","الموقع","الاسم عندهم","السعر","التوفر","رابط"].map(h=>(<th key={h} style={{padding:"9px 12px",textAlign:"right",color:"#555",fontWeight:"500",borderBottom:"1px solid #1e1e2e"}}>{h}</th>))}
+                        </tr></thead>
+                        <tbody>
+                          {compRows.filter(r=>r.status==="done").flatMap(row=>
+                            row.results.length===0
+                              ?[<tr key={row.id+"-e"} style={{borderBottom:"1px solid #141420"}}><td style={{padding:"9px 12px",color:"#c8b8ff",fontFamily:"monospace",fontSize:"11px"}}>{row.sku||"—"}</td><td style={{padding:"9px 12px",maxWidth:"150px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.query}</td><td colSpan={5} style={{padding:"9px 12px",color:"#555",fontSize:"12px"}}>لا نتائج</td></tr>]
+                              :row.results.map((r,i)=>(
+                                <tr key={row.id+"-"+i} style={{borderBottom:"1px solid #141420",background:i%2?"#0d0d14":"transparent"}}>
+                                  <td style={{padding:"9px 12px",color:"#c8b8ff",fontFamily:"monospace",fontSize:"11px"}}>{row.sku||"—"}</td>
+                                  <td style={{padding:"9px 12px",maxWidth:"140px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.query}</td>
+                                  <td style={{padding:"9px 12px"}}><span style={{fontSize:"11px",padding:"2px 8px",background:"#1a1a2e",color:"#c8b8ff",borderRadius:"6px",fontWeight:"600"}}>{r.competitor}</span></td>
+                                  <td style={{padding:"9px 12px",maxWidth:"180px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.title||"—"}</td>
+                                  <td style={{padding:"9px 12px",color:"#c8b8ff",fontWeight:"600"}}>{r.price?`${r.price.toLocaleString()} ${r.currency}`:"—"}</td>
+                                  <td style={{padding:"9px 12px"}}><span style={{display:"inline-flex",alignItems:"center",gap:"4px",padding:"2px 8px",borderRadius:"20px",fontSize:"11px",background:r.available===true?"#0d1f0d":r.available===false?"#1f0d0d":"#1a1a2e",color:r.available===true?"#4ade80":r.available===false?"#f87171":"#555"}}><span style={{width:4,height:4,borderRadius:"50%",background:"currentColor"}}/>{r.available===true?"متوفر":r.available===false?"غير متوفر":"—"}</span></td>
+                                  <td style={{padding:"9px 12px"}}>{r.link?<a href={r.link} target="_blank" rel="noopener noreferrer" style={{color:"#7c6af7",fontSize:"12px",textDecoration:"none"}}>فتح ↗</a>:<span style={{color:"#333"}}>—</span>}</td>
+                                </tr>
+                              ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       </div>
     </div>
   );
 
-  if (view === "dashboard") return (
+    if (view === "dashboard") return (
     <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
       <div style={{ display: "flex", minHeight: "100vh" }}>

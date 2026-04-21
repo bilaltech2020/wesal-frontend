@@ -79,17 +79,7 @@ export default function Home() {
   const [compTab, setCompTab] = useState<"manual"|"excel"|"results">("manual");
   const compExcelRef = useRef<HTMLInputElement>(null);
 
-  // Competitors
-  const [compRows, setCompRows] = useState<CompRow[]>([{ id: "1", sku: "", query: "", status: "idle", results: [] }]);
-  const [compSelectedSites, setCompSelectedSites] = useState<string[]>(["homecenter", "noon"]);
-  const [compExcelFile, setCompExcelFile] = useState("");
-  const [compExcelRows, setCompExcelRows] = useState<Record<string,string>[]>([]);
-  const [compExcelCols, setCompExcelCols] = useState<string[]>([]);
-  const [compSkuCol, setCompSkuCol] = useState("");
-  const [compNameCol, setCompNameCol] = useState("");
-  const [compSearching, setCompSearching] = useState(false);
-  const [compTab, setCompTab] = useState<"manual"|"excel"|"results">("manual");
-  const compExcelRef = useRef<HTMLInputElement>(null);
+
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [scrapeLoading, setScrapeLoading] = useState(false);
   const [scrapeError, setScrapeError] = useState("");

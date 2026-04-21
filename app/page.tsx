@@ -62,6 +62,8 @@ export default function Home() {
       setUser(JSON.parse(savedUser));
       setView("dashboard");
     }
+  }, []);
+
   // ── Competitor Monitor v2 state ──
   const [compSites, setCompSites] = useState<{id:string;name:string;url:string}[]>([
     { id:"hc", name:"Homecenter", url:"https://www.homecenter.com.sa" },
@@ -309,6 +311,8 @@ export default function Home() {
     XLSX.writeFile(wb, "مراقبة_المنافسين.xlsx");
   };
 
+  const handleScrape = async (targetUrl: string, existingId?: string) => {
+    if (!targetUrl.trim()) return;
     if (existingId) setRefreshingId(existingId); else setScrapeLoading(true);
     setScrapeError("");
     try {

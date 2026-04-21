@@ -225,11 +225,24 @@ export default function Home() {
     if (!targetUrl.trim()) return;
 
   // ── Competitor Monitor v2 functions ──
-  const compAddSite = () => {
+  const compAddSite = async () => {
     if (!compNewSiteName.trim() || !compNewSiteUrl.trim()) return;
-    const url = compNewSiteUrl.startsWith("http") ? compNewSiteUrl.trim() : "https://" + compNewSiteUrl.trim();
-    setCompSites(p => [...p, { id: Date.now().toString(), name: compNewSiteName.trim(), url }]);
+    const rawUrl  = compNewSiteUrl.trim();
+    const fullUrl = rawUrl.startsWith("http") ? rawUrl : "https://" + rawUrl;
+    const key     = compNewSiteName.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    try {
+      await fetch(`${API_URL}/competitors/add`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, name: compNewSiteName.trim(), url: fullUrl }),
+      });
+    } catch {}
+    setCompSites(p => [...p, { id: key, name: compNewSiteName.trim(), url: fullUrl }]);
     setCompNewSiteName(""); setCompNewSiteUrl("");
+  };
+
+  const compRemoveSite = async (siteId: string) => {
+    try { await fetch(`${API_URL}/competitors/${siteId}`, { method: "DELETE" }); } catch {}
+    setCompSites(p => p.filter(s => s.id !== siteId));
   };
 
   const compAddRow = () => setCompRows(p => [...p, { id: Date.now().toString(), sku: "", query: "", status: "idle", results: [] }]);
@@ -241,22 +254,15 @@ export default function Home() {
     if (!row || !row.query.trim() || compSites.length === 0) return;
     setCompRows(p => p.map(r => r.id === id ? {...r, status: "searching", results: []} : r));
     try {
-      // استخدم أسماء المواقع المضافة كـ competitor_keys
-      const siteKeys = compSites.map(s => {
-        const url = s.url.toLowerCase();
-        if (url.includes("homecenter")) return "homecenter";
-        if (url.includes("noon")) return "noon";
-        // للمواقع الجديدة — أضفها في backend أولاً
-        return s.name.toLowerCase().replace(/\s+/g, "_");
-      });
+      const siteKeys = compSites.map(s => s.id);
       const res = await fetch(`${API_URL}/competitors/scan`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku: row.sku || row.query, query: row.query, competitor_keys: siteKeys, background: false, max_results: 3 })
+        body: JSON.stringify({ sku: row.sku || row.query, query: row.query, competitor_keys: siteKeys, background: false, max_results: 3, fetch_details: true })
       });
       const data = await res.json();
       const flat: CompResult[] = [];
       Object.entries(data.results || {}).forEach(([comp, items]: [string, any[]]) => {
-        const siteName = compSites.find(s => s.url.toLowerCase().includes(comp))?.name || comp;
+        const siteName = compSites.find(s => s.id === comp)?.name || comp;
         if (!items || items.length === 0) {
           flat.push({ competitor: siteName, title: null, price: null, currency: "SAR", link: null, available: null, error: "لم يُعثر على المنتج" });
         } else {
@@ -983,7 +989,7 @@ export default function Home() {
                         <div style={{ fontSize:"13px", fontWeight:"500" }}>{s.name}</div>
                         <div style={{ fontSize:"11px", color:"#555", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", direction:"ltr", textAlign:"left" }}>{s.url}</div>
                       </div>
-                      <button onClick={() => setCompSites(p => p.filter(x => x.id !== s.id))} style={{ background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:"13px" }}>✕</button>
+                      <button onClick={() => compRemoveSite(s.id)} style={{ background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:"13px" }}>✕</button>
                     </div>
                   ))}
                 </div>

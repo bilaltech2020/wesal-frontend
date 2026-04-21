@@ -325,6 +325,33 @@ export default function Home() {
     }
   };
 
+  const [compAnalyzing, setCompAnalyzing] = useState(false);
+  const [compOurPrice, setCompOurPrice] = useState("");
+
+  const compAnalyzeResults = async (rowId: string) => {
+    const row = compRows.find(r => r.id === rowId);
+    if (!row || row.results.length === 0) return;
+    setCompAnalyzing(true);
+    try {
+      const res = await fetch(`${API_URL}/competitors/analyze`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query:     row.query,
+          our_price: compOurPrice ? parseFloat(compOurPrice) : null,
+          results:   row.results,
+        })
+      });
+      const data = await res.json();
+      // حدّث النتائج مع التحليل
+      setCompRows(p => p.map(r => r.id === rowId ? {
+        ...r,
+        results: data.results || r.results,
+        analysis_summary: data.summary,
+      } as any : r));
+    } catch {}
+    setCompAnalyzing(false);
+  };
+
   const compExportExcel = () => {
     const XLSX = (window as any).XLSX;
     const data: any[] = [];
@@ -976,19 +1003,46 @@ export default function Home() {
                     </span>
                     <button onClick={()=>compSearchRow(row.id)} disabled={row.status==="searching"}
                       style={{ padding:"3px 9px", background:"none", border:"1px solid #2a2a3e", borderRadius:"5px", color:"#888", cursor:"pointer", fontSize:"11px", fontFamily:"inherit" }}>↻</button>
+                    {row.status==="done" && row.results.filter(r=>r.title).length > 0 && (
+                      <button onClick={()=>compAnalyzeResults(row.id)} disabled={compAnalyzing}
+                        style={{ padding:"3px 10px", background:compAnalyzing?"#2a2a3e":"#1a2a1a", border:"1px solid #2a4a2a", borderRadius:"5px", color:compAnalyzing?"#555":"#4ade80", cursor:compAnalyzing?"not-allowed":"pointer", fontSize:"11px", fontFamily:"inherit" }}>
+                        {compAnalyzing ? "..." : "🤖 تحليل ذكي"}
+                      </button>
+                    )}
                   </div>
-                  {row.status==="done" && row.results.map((r,i) => (
-                    <div key={i} style={{ display:"grid", gridTemplateColumns:"110px 1fr 120px 90px 65px", alignItems:"center", padding:"9px 16px", borderBottom:"1px solid #141420", gap:"10px", background:i%2?"#0d0d14":"transparent" }}>
-                      <span style={{ fontSize:"11px", padding:"3px 8px", background:"#1a1a2e", color:"#c8b8ff", borderRadius:"6px", textAlign:"center", fontWeight:"600", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.competitor}</span>
-                      <span style={{ fontSize:"12px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:r.title?"#e8e8f0":"#555" }}>{r.title||r.error||"—"}</span>
-                      <span style={{ fontSize:"13px", fontWeight:"700", color:r.price?"#c8b8ff":"#555" }}>{r.price?`${r.price.toLocaleString()} ${r.currency}`:"—"}</span>
-                      <span style={{ display:"inline-flex", alignItems:"center", gap:"4px", padding:"2px 8px", borderRadius:"20px", fontSize:"11px", background:r.available===true?"#0d1f0d":r.available===false?"#1f0d0d":"#1a1a2e", color:r.available===true?"#4ade80":r.available===false?"#f87171":"#555", border:`1px solid ${r.available===true?"#1a3a1a":r.available===false?"#3a1a1a":"#2a2a3e"}` }}>
-                        <span style={{ width:4, height:4, borderRadius:"50%", background:"currentColor" }} />
-                        {r.available===true?"متوفر":r.available===false?"غير متوفر":"—"}
-                      </span>
-                      {r.link?<a href={r.link} target="_blank" rel="noopener noreferrer" style={{ fontSize:"12px", color:"#7c6af7", textDecoration:"none" }}>فتح ↗</a>:<span style={{color:"#333",fontSize:"12px"}}>—</span>}
+                  {row.status==="done" && row.results.map((r,i) => {
+                    const ai = (r as any).ai_analysis;
+                    const recColor = ai?.price_recommendation === "increase" ? "#4ade80" : ai?.price_recommendation === "decrease" ? "#f87171" : "#888";
+                    return (
+                    <div key={i} style={{ borderBottom:"1px solid #141420", background:i%2?"#0d0d14":"transparent" }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"110px 1fr 120px 90px 65px", alignItems:"center", padding:"9px 16px", gap:"10px" }}>
+                        <span style={{ fontSize:"11px", padding:"3px 8px", background:"#1a1a2e", color:"#c8b8ff", borderRadius:"6px", textAlign:"center", fontWeight:"600", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.competitor}</span>
+                        <div>
+                          <div style={{ fontSize:"12px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:r.title?"#e8e8f0":"#555" }}>{r.title||r.error||"—"}</div>
+                          {ai && <div style={{ fontSize:"10px", color:"#555", marginTop:"2px" }}>
+                            <span style={{ color: ai.confidence >= 75 ? "#4ade80" : ai.confidence >= 60 ? "#ffd166" : "#f87171" }}>{ai.match_type}</span>
+                            <span style={{ margin:"0 4px", color:"#333" }}>·</span>
+                            <span>{ai.match_reason}</span>
+                          </div>}
+                        </div>
+                        <span style={{ fontSize:"13px", fontWeight:"700", color:r.price?"#c8b8ff":"#555" }}>{r.price?`${r.price.toLocaleString()} ${r.currency}`:"—"}</span>
+                        <span style={{ display:"inline-flex", alignItems:"center", gap:"4px", padding:"2px 8px", borderRadius:"20px", fontSize:"11px", background:r.available===true?"#0d1f0d":r.available===false?"#1f0d0d":"#1a1a2e", color:r.available===true?"#4ade80":r.available===false?"#f87171":"#555", border:`1px solid ${r.available===true?"#1a3a1a":r.available===false?"#3a1a1a":"#2a2a3e"}` }}>
+                          <span style={{ width:4, height:4, borderRadius:"50%", background:"currentColor" }} />
+                          {r.available===true?"متوفر":r.available===false?"غير متوفر":"—"}
+                        </span>
+                        {r.link?<a href={r.link} target="_blank" rel="noopener noreferrer" style={{ fontSize:"12px", color:"#7c6af7", textDecoration:"none" }}>فتح ↗</a>:<span style={{color:"#333",fontSize:"12px"}}>—</span>}
+                      </div>
+                      {ai?.price_recommendation && ai.price_recommendation !== "unknown" && (
+                        <div style={{ padding:"4px 16px 8px", display:"flex", alignItems:"center", gap:"6px" }}>
+                          <span style={{ fontSize:"10px", color:"#555" }}>توصية:</span>
+                          <span style={{ fontSize:"11px", fontWeight:"600", color:recColor, padding:"1px 8px", background:recColor+"15", borderRadius:"20px" }}>
+                            {ai.price_recommendation === "increase" ? "↑ ارفع السعر" : ai.price_recommendation === "decrease" ? "↓ راجع السعر" : "← حافظ على السعر"}
+                          </span>
+                          <span style={{ fontSize:"10px", color:"#555" }}>{ai.price_recommendation_reason}</span>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               ))}
             </div>

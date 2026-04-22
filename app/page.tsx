@@ -1313,7 +1313,6 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, SYSTEM_PROMPT, 
   const [dimH, setDimH]                 = useState("");
   const [envStyle, setEnvStyle]         = useState("Luxury Modern");
   const [labelLang, setLabelLang]       = useState("Arabic");
-  const [apiKey, setApiKey]             = useState(() => localStorage.getItem("anthropic_key") || "");
   const [notes, setNotes]               = useState("");
   const [loading, setLoading]           = useState(false);
   const [result, setResult]             = useState<any>(null);
@@ -1341,27 +1340,31 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, SYSTEM_PROMPT, 
   const handleGenerate = async () => {
     if (!imageBase64 && !imageUrl && !category) return;
     setLoading(true); setError(""); setResult(null);
-    const dims = [dimW?`Width: ${dimW}cm`:null, dimD?`Depth: ${dimD}cm`:null, dimH?`Height: ${dimH}cm`:null].filter(Boolean).join(", ");
-    const userContent: any[] = [];
-    if (imageBase64) userContent.push({ type:"image", source:{ type:"base64", media_type:"image/jpeg", data: imageBase64 }});
-    userContent.push({ type:"text", text:`Category: ${category||"auto"}
-Environment: ${envStyle}
-Dimensions: ${dims||"not provided"}
-Label language: ${labelLang}
-Notes: ${notes||"none"}
-Image URL: ${imageUrl||"not provided"}` });
     try {
-      const apiKey = (window as any).__ANTHROPIC_KEY__ || localStorage.getItem("anthropic_key") || "";
-      if (apiKey) localStorage.setItem("anthropic_key", apiKey);
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{"Content-Type":"application/json", "x-api-key": apiKey, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true"},
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000, system: SYSTEM_PROMPT, messages:[{role:"user",content:userContent}] })
+      const res = await fetch(`${API_URL}/content-studio/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category:     category,
+          env_style:    envStyle,
+          dim_w:        dimW,
+          dim_d:        dimD,
+          dim_h:        dimH,
+          label_lang:   labelLang,
+          notes:        notes,
+          image_url:    imageUrl,
+          image_base64: imageBase64 || "",
+        })
       });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "خطأ في الخادم"); }
       const data = await res.json();
-      const raw = (data.content?.[0]?.text||"{}").replace(/```json|```/g,"").trim();
-      setResult(JSON.parse(raw));
+      setResult(data);
       setActiveTab("white");
-    } catch { setError("خطأ في التوليد — تأكد من رفع صورة أو إدخال بيانات"); }
+    } catch(e: any) {
+      setError(e.message || "خطأ — تأكد من إعداد ANTHROPIC_API_KEY في Railway");
+    }
+    setLoading(false);
+
     setLoading(false);
   };
 
@@ -1447,15 +1450,7 @@ Image URL: ${imageUrl||"not provided"}` });
                 style={{ ...inStyle, resize:"none" }} />
             </div>
 
-            <div>
-              <p style={{ fontSize:"12px", color:"#6060a0", margin:"0 0 5px", fontWeight:"600" }}>🔑 Anthropic API Key</p>
-              <input value={apiKey} onChange={e => { setApiKey(e.target.value); localStorage.setItem("anthropic_key", e.target.value); }}
-                placeholder="sk-ant-..." type="password"
-                style={{ ...inStyle, direction:"ltr", textAlign:"left", fontFamily:"monospace", fontSize:"11px" }} />
-              <p style={{ fontSize:"10px", color:"#3030a0", margin:"4px 0 0" }}>يُحفظ تلقائياً في المتصفح</p>
-            </div>
-
-            <button onClick={handleGenerate} disabled={loading || (!imageBase64 && !imageUrl && !category) || !apiKey}
+            <button onClick={handleGenerate} disabled={loading || (!imageBase64 && !imageUrl && !category)}
               style={{ width:"100%", padding:"13px", background:loading?"#1a1a3a":"linear-gradient(135deg,#7c3aed,#db2777)", border:"none", borderRadius:"10px", color:loading?"#5050a0":"#fff", fontSize:"14px", fontWeight:"800", cursor:loading?"not-allowed":"pointer", fontFamily:"inherit" }}>
               {loading ? "جاري التوليد..." : "✨ توليد الـ Prompts"}
             </button>

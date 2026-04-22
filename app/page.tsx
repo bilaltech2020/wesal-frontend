@@ -1297,6 +1297,7 @@ RULE: Every prompt must include: Keep the product exactly the same shape, color,
       <div style={{ textAlign: "center", padding: "24px", borderTop: "1px solid #1e1e2e", color: "#333", fontSize: "12px" }}>© 2025 وصال — جميع الحقوق محفوظة</div>
     </div>
   );
+}
 
 
 // ══════════════════════════════════════

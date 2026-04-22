@@ -28,7 +28,7 @@ interface InventorySearch { id: string; sku: string; results: InventoryResult[];
 interface CompRow { id: string; sku: string; query: string; status: "idle"|"searching"|"done"|"error"; results: CompResult[]; }
 interface CompResult { competitor: string; title: string|null; price: number|null; currency: string; link: string|null; available: boolean|null; error: string|null; }
 
-type ViewType = "landing" | "login" | "register" | "dashboard" | "competitors" | "inventory" | "reports";
+type ViewType = "landing" | "login" | "register" | "dashboard" | "competitors" | "inventory" | "reports" | "content";
 
 const NAV = [
   { icon: "⬡", label: "لوحة التحكم", v: "dashboard" },
@@ -37,6 +37,7 @@ const NAV = [
   { icon: "◈", label: "التكاملات", v: "dashboard" },
   { icon: "◇", label: "التقارير", v: "reports" },
   { icon: "○", label: "الإعدادات", v: "dashboard" },
+  { icon: "✨", label: "Content Studio", v: "content" },
 ];
 
 const inputStyle: React.CSSProperties = {
@@ -1166,7 +1167,36 @@ export default function Home() {
     </div>
   );
 
-    if (view === "dashboard") return (
+  
+  // ══════════════════════════════════════
+  // CONTENT STUDIO VIEW
+  // ══════════════════════════════════════
+  if (view === "content") {
+    const ENV_STYLES = [
+      "Minimal Modern","Luxury Modern","Warm Cozy","Scandinavian",
+      "Hotel Style","Premium Arabic Interior","Outdoor Resort",
+      "Café Style","Office Style","Neutral Editorial"
+    ];
+    const CATEGORIES = [
+      "كنبة / أريكة","طاولة جانبية","طاولة قهوة","طاولة طعام",
+      "كرسي","مرآة","خزانة / وحدة TV","إضاءة","أثاث خارجي","ديكور"
+    ];
+    const SYSTEM_PROMPT = `You are an AI Content Studio Agent for e-commerce product image production. Generate commercial-ready image prompts while preserving the product EXACTLY. Return ONLY valid JSON:
+{"product_detected":"brief description","white_background":"complete white studio prompt","environment":"complete environment prompt","dimension":"complete dimension annotation prompt","environment_variations":[{"style":"Luxury Modern","prompt":"..."},{"style":"Warm Cozy","prompt":"..."},{"style":"Scandinavian","prompt":"..."},{"style":"Hotel Style","prompt":"..."},{"style":"Premium Arabic Interior","prompt":"..."}],"notes":"short notes if needed"}
+RULE: Every prompt must include: Keep the product exactly the same shape, color, material, structure, proportions, and design. Only change background/lighting.`;
+
+    return (
+      <ContentStudioView
+        sidebarJSX={sidebarJSX}
+        ENV_STYLES={ENV_STYLES}
+        CATEGORIES={CATEGORIES}
+        SYSTEM_PROMPT={SYSTEM_PROMPT}
+        API_URL={API_URL}
+      />
+    );
+  }
+
+  if (view === "dashboard") return (
     <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" }}>
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
       <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -1265,6 +1295,232 @@ export default function Home() {
         </div>
       </div>
       <div style={{ textAlign: "center", padding: "24px", borderTop: "1px solid #1e1e2e", color: "#333", fontSize: "12px" }}>© 2025 وصال — جميع الحقوق محفوظة</div>
+    </div>
+  );
+
+
+// ══════════════════════════════════════
+// ContentStudioView Component
+// ══════════════════════════════════════
+function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, SYSTEM_PROMPT, API_URL }: any) {
+  const [imagePreview, setImagePreview] = useState<string|null>(null);
+  const [imageBase64, setImageBase64]   = useState<string|null>(null);
+  const [imageUrl, setImageUrl]         = useState("");
+  const [category, setCategory]         = useState("");
+  const [dimW, setDimW]                 = useState("");
+  const [dimD, setDimD]                 = useState("");
+  const [dimH, setDimH]                 = useState("");
+  const [envStyle, setEnvStyle]         = useState("Luxury Modern");
+  const [labelLang, setLabelLang]       = useState("Arabic");
+  const [notes, setNotes]               = useState("");
+  const [loading, setLoading]           = useState(false);
+  const [result, setResult]             = useState<any>(null);
+  const [error, setError]               = useState("");
+  const [activeTab, setActiveTab]       = useState("white");
+  const [copied, setCopied]             = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setImagePreview(ev.target?.result as string);
+      setImageBase64((ev.target?.result as string).split(",")[1]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const copyText = async (text: string, key: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(key); setTimeout(() => setCopied(""), 2000);
+  };
+
+  const handleGenerate = async () => {
+    if (!imageBase64 && !imageUrl && !category) return;
+    setLoading(true); setError(""); setResult(null);
+    const dims = [dimW?`Width: ${dimW}cm`:null, dimD?`Depth: ${dimD}cm`:null, dimH?`Height: ${dimH}cm`:null].filter(Boolean).join(", ");
+    const userContent: any[] = [];
+    if (imageBase64) userContent.push({ type:"image", source:{ type:"base64", media_type:"image/jpeg", data: imageBase64 }});
+    userContent.push({ type:"text", text:`Category: ${category||"auto"}
+Environment: ${envStyle}
+Dimensions: ${dims||"not provided"}
+Label language: ${labelLang}
+Notes: ${notes||"none"}
+Image URL: ${imageUrl||"not provided"}` });
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000, system: SYSTEM_PROMPT, messages:[{role:"user",content:userContent}] })
+      });
+      const data = await res.json();
+      const raw = (data.content?.[0]?.text||"{}").replace(/```json|```/g,"").trim();
+      setResult(JSON.parse(raw));
+      setActiveTab("white");
+    } catch { setError("خطأ في التوليد — تأكد من رفع صورة أو إدخال بيانات"); }
+    setLoading(false);
+  };
+
+  const inStyle: React.CSSProperties = { width:"100%", padding:"8px 12px", background:"#0d0d1e", border:"1px solid #1e1e3a", borderRadius:"8px", color:"#a0a0c0", fontSize:"12px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" };
+  const tabs = [{k:"white",l:"خلفية بيضاء",i:"⬜"},{k:"env",l:"بيئة واقعية",i:"🏠"},{k:"dim",l:"مقاسات",i:"📐"},{k:"vars",l:"5 بيئات",i:"🎨"}];
+
+  return (
+    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"#07070f", color:"#e2e2f0" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+      <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+      <div style={{ display:"flex", minHeight:"100vh" }}>
+        {sidebarJSX}
+        <div style={{ flex:1, display:"grid", gridTemplateColumns:"280px 1fr", overflow:"hidden" }}>
+
+          {/* Left panel */}
+          <div style={{ background:"#0a0a1a", borderLeft:"1px solid #1a1a3a", padding:"20px", overflowY:"auto", display:"flex", flexDirection:"column", gap:"14px" }}>
+            <div>
+              <h2 style={{ fontSize:"16px", fontWeight:"800", margin:"0 0 4px", color:"#fff" }}>✨ Content Studio AI</h2>
+              <p style={{ fontSize:"12px", color:"#5050a0", margin:0 }}>توليد prompts احترافية لصور المنتجات</p>
+            </div>
+
+            {/* Image upload */}
+            <div>
+              <p style={{ fontSize:"12px", color:"#6060a0", margin:"0 0 6px", fontWeight:"600" }}>صورة المنتج</p>
+              {imagePreview ? (
+                <div style={{ position:"relative" }}>
+                  <img src={imagePreview} alt="" style={{ width:"100%", height:"140px", objectFit:"contain", background:"#111122", borderRadius:"10px", border:"1px solid #1e1e3a" }} />
+                  <button onClick={() => { setImagePreview(null); setImageBase64(null); }} style={{ position:"absolute", top:6, left:6, width:22, height:22, background:"#1f0d0d", border:"1px solid #3a1a1a", borderRadius:"50%", color:"#f87171", cursor:"pointer", fontSize:"11px" }}>✕</button>
+                </div>
+              ) : (
+                <div onClick={() => fileRef.current?.click()} style={{ border:"2px dashed #1e1e3a", borderRadius:"10px", padding:"24px", textAlign:"center", cursor:"pointer", background:"#0d0d1e" }}>
+                  <input ref={fileRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display:"none" }} />
+                  <div style={{ fontSize:"24px", marginBottom:"6px" }}>📷</div>
+                  <div style={{ fontSize:"12px", color:"#4040a0" }}>ارفع صورة المنتج</div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p style={{ fontSize:"12px", color:"#6060a0", margin:"0 0 5px", fontWeight:"600" }}>أو رابط الصورة</p>
+              <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." style={{ ...inStyle, direction:"ltr", textAlign:"left" }} />
+            </div>
+
+            <div>
+              <p style={{ fontSize:"12px", color:"#6060a0", margin:"0 0 5px", fontWeight:"600" }}>فئة المنتج</p>
+              <select value={category} onChange={e => setCategory(e.target.value)} style={inStyle}>
+                <option value="">اكتشاف تلقائي</option>
+                {CATEGORIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <p style={{ fontSize:"12px", color:"#6060a0", margin:"0 0 6px", fontWeight:"600" }}>المقاسات (سم)</p>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"6px" }}>
+                {([["العرض",dimW,setDimW],["العمق",dimD,setDimD],["الارتفاع",dimH,setDimH]] as [string,string,any][]).map(([l,v,s]) => (
+                  <div key={l}>
+                    <div style={{ fontSize:"10px", color:"#4040a0", marginBottom:"3px" }}>{l}</div>
+                    <input value={v} onChange={e => s(e.target.value)} placeholder="—" style={{ ...inStyle, padding:"6px 8px" }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p style={{ fontSize:"12px", color:"#6060a0", margin:"0 0 5px", fontWeight:"600" }}>أسلوب البيئة</p>
+              <select value={envStyle} onChange={e => setEnvStyle(e.target.value)} style={inStyle}>
+                {ENV_STYLES.map((s: string) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <p style={{ fontSize:"12px", color:"#6060a0", margin:"0 0 6px", fontWeight:"600" }}>لغة المقاسات</p>
+              <div style={{ display:"flex", gap:"6px" }}>
+                {["Arabic","English"].map(l => (
+                  <button key={l} onClick={() => setLabelLang(l)} style={{ flex:1, padding:"7px", background:labelLang===l?"#1e1a3a":"#0d0d1e", border:`1px solid ${labelLang===l?"#7c3aed":"#1e1e3a"}`, borderRadius:"7px", color:labelLang===l?"#a78bfa":"#4040a0", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p style={{ fontSize:"12px", color:"#6060a0", margin:"0 0 5px", fontWeight:"600" }}>ملاحظات</p>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي تفاصيل إضافية..." rows={2}
+                style={{ ...inStyle, resize:"none" }} />
+            </div>
+
+            <button onClick={handleGenerate} disabled={loading || (!imageBase64 && !imageUrl && !category)}
+              style={{ width:"100%", padding:"13px", background:loading?"#1a1a3a":"linear-gradient(135deg,#7c3aed,#db2777)", border:"none", borderRadius:"10px", color:loading?"#5050a0":"#fff", fontSize:"14px", fontWeight:"800", cursor:loading?"not-allowed":"pointer", fontFamily:"inherit" }}>
+              {loading ? "جاري التوليد..." : "✨ توليد الـ Prompts"}
+            </button>
+          </div>
+
+          {/* Right: Results */}
+          <div style={{ padding:"24px", overflowY:"auto", background:"#07070f" }}>
+            {loading && (
+              <div style={{ textAlign:"center", padding:"60px 0" }}>
+                <div style={{ width:40, height:40, border:"3px solid #1e1e3a", borderTopColor:"#7c3aed", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 14px" }} />
+                <p style={{ color:"#5050a0", fontSize:"13px" }}>Claude يولد الـ prompts...</p>
+              </div>
+            )}
+
+            {error && <div style={{ padding:"12px 16px", background:"#1f0d0d", border:"1px solid #3a1a1a", borderRadius:"10px", color:"#f87171", fontSize:"13px", marginBottom:"16px" }}>⚠ {error}</div>}
+
+            {result && !loading && (
+              <>
+                {result.product_detected && (
+                  <div style={{ background:"#0d1a0d", border:"1px solid #1a3a1a", borderRadius:"10px", padding:"10px 14px", marginBottom:"16px" }}>
+                    <span style={{ fontSize:"12px", color:"#4ade80" }}>✅ تم اكتشاف: {result.product_detected}</span>
+                  </div>
+                )}
+                <div style={{ display:"flex", borderBottom:"1px solid #1a1a3a", marginBottom:"16px" }}>
+                  {tabs.map(t => (
+                    <button key={t.k} onClick={() => setActiveTab(t.k)}
+                      style={{ padding:"8px 14px", background:"none", border:"none", borderBottom:activeTab===t.k?"2px solid #7c3aed":"2px solid transparent", color:activeTab===t.k?"#a78bfa":"#5050a0", fontSize:"12px", fontWeight:activeTab===t.k?"700":"400", cursor:"pointer", fontFamily:"inherit", marginBottom:"-1px" }}>
+                      {t.i} {t.l}
+                    </button>
+                  ))}
+                </div>
+
+                {activeTab==="white" && result.white_background && (
+                  <PromptBox label="⬜ White Studio Background" prompt={result.white_background} id="w" copied={copied} onCopy={copyText} />
+                )}
+                {activeTab==="env" && result.environment && (
+                  <PromptBox label={`🏠 Environment — ${envStyle}`} prompt={result.environment} id="e" copied={copied} onCopy={copyText} />
+                )}
+                {activeTab==="dim" && result.dimension && (
+                  <PromptBox label="📐 Dimension Annotation" prompt={result.dimension} id="d" copied={copied} onCopy={copyText} />
+                )}
+                {activeTab==="vars" && result.environment_variations?.map((v: any, i: number) => (
+                  <PromptBox key={i} label={`🎨 ${v.style}`} prompt={v.prompt} id={`v${i}`} copied={copied} onCopy={copyText} />
+                ))}
+                {result.notes && (
+                  <div style={{ background:"#0d0d1e", border:"1px solid #1e2a3a", borderRadius:"8px", padding:"10px 14px", marginTop:"8px" }}>
+                    <span style={{ fontSize:"11px", color:"#5060a0" }}>📝 {result.notes}</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {!result && !loading && !error && (
+              <div style={{ textAlign:"center", padding:"80px 0" }}>
+                <div style={{ fontSize:"52px", marginBottom:"14px", opacity:0.15 }}>✨</div>
+                <p style={{ color:"#4040a0", fontSize:"14px", marginBottom:"6px" }}>ارفع صورة المنتج وحدد الإعدادات</p>
+                <p style={{ color:"#2a2a60", fontSize:"12px" }}>سيولد Claude prompts احترافية جاهزة لأدوات توليد الصور</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PromptBox({ label, prompt, id, copied, onCopy }: { label:string; prompt:string; id:string; copied:string; onCopy:(t:string,k:string)=>void }) {
+  return (
+    <div style={{ background:"#0d0d1e", border:"1px solid #1e1e3a", borderRadius:"12px", padding:"16px", marginBottom:"12px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
+        <span style={{ fontSize:"12px", fontWeight:"700", color:"#a78bfa" }}>{label}</span>
+        <button onClick={() => onCopy(prompt, id)}
+          style={{ padding:"4px 12px", background:copied===id?"#1a3a1a":"#1a1a3a", border:`1px solid ${copied===id?"#4ade80":"#2a2a5a"}`, borderRadius:"6px", color:copied===id?"#4ade80":"#6060c0", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
+          {copied===id ? "✓ تم النسخ" : "نسخ"}
+        </button>
+      </div>
+      <p style={{ fontSize:"12px", color:"#8080b0", lineHeight:"1.7", margin:0, direction:"ltr", textAlign:"left", whiteSpace:"pre-wrap" }}>{prompt}</p>
     </div>
   );
 }

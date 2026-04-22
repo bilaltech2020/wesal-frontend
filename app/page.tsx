@@ -1319,6 +1319,8 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, SYSTEM_PROMPT, 
   const [error, setError]               = useState("");
   const [activeTab, setActiveTab]       = useState("white");
   const [copied, setCopied]             = useState("");
+  const [genLoading, setGenLoading]     = useState<string|null>(null);
+  const [genImages, setGenImages]       = useState<Record<string,string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1335,6 +1337,30 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, SYSTEM_PROMPT, 
   const copyText = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text);
     setCopied(key); setTimeout(() => setCopied(""), 2000);
+  };
+
+  const generateImage = async (prompt: string, mode: string) => {
+    setGenLoading(mode);
+    try {
+      const res = await fetch(`${API_URL}/content-studio/generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          image_base64: imageBase64 || "",
+          image_url:    imageUrl,
+          mode,
+          width: 1024,
+          height: 1024,
+        })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "خطأ"); }
+      const data = await res.json();
+      setGenImages(p => ({ ...p, [mode]: data.image_url }));
+    } catch(e: any) {
+      alert("خطأ في توليد الصورة: " + e.message);
+    }
+    setGenLoading(null);
   };
 
   const handleGenerate = async () => {
@@ -1484,16 +1510,16 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, SYSTEM_PROMPT, 
                 </div>
 
                 {activeTab==="white" && result.white_background && (
-                  <PromptBox label="⬜ White Studio Background" prompt={result.white_background} id="w" copied={copied} onCopy={copyText} />
+                  <PromptBox label="⬜ White Studio Background" prompt={result.white_background} id="white" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["white"]} />
                 )}
                 {activeTab==="env" && result.environment && (
-                  <PromptBox label={`🏠 Environment — ${envStyle}`} prompt={result.environment} id="e" copied={copied} onCopy={copyText} />
+                  <PromptBox label={`🏠 Environment — ${envStyle}`} prompt={result.environment} id="env" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["env"]} />
                 )}
                 {activeTab==="dim" && result.dimension && (
-                  <PromptBox label="📐 Dimension Annotation" prompt={result.dimension} id="d" copied={copied} onCopy={copyText} />
+                  <PromptBox label="📐 Dimension Annotation" prompt={result.dimension} id="dim" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["dim"]} />
                 )}
                 {activeTab==="vars" && result.environment_variations?.map((v: any, i: number) => (
-                  <PromptBox key={i} label={`🎨 ${v.style}`} prompt={v.prompt} id={`v${i}`} copied={copied} onCopy={copyText} />
+                  <PromptBox key={i} label={`🎨 ${v.style}`} prompt={v.prompt} id={`var${i}`} copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages[`var${i}`]} />
                 ))}
                 {result.notes && (
                   <div style={{ background:"#0d0d1e", border:"1px solid #1e2a3a", borderRadius:"8px", padding:"10px 14px", marginTop:"8px" }}>
@@ -1517,17 +1543,41 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, SYSTEM_PROMPT, 
   );
 }
 
-function PromptBox({ label, prompt, id, copied, onCopy }: { label:string; prompt:string; id:string; copied:string; onCopy:(t:string,k:string)=>void }) {
+function PromptBox({ label, prompt, id, copied, onCopy, onGenerate, genLoading, genImage }: {
+  label:string; prompt:string; id:string; copied:string;
+  onCopy:(t:string,k:string)=>void;
+  onGenerate?:(prompt:string,mode:string)=>void;
+  genLoading?:string|null;
+  genImage?:string;
+}) {
+  const isGenerating = genLoading === id;
   return (
     <div style={{ background:"#0d0d1e", border:"1px solid #1e1e3a", borderRadius:"12px", padding:"16px", marginBottom:"12px" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px", gap:"8px" }}>
         <span style={{ fontSize:"12px", fontWeight:"700", color:"#a78bfa" }}>{label}</span>
-        <button onClick={() => onCopy(prompt, id)}
-          style={{ padding:"4px 12px", background:copied===id?"#1a3a1a":"#1a1a3a", border:`1px solid ${copied===id?"#4ade80":"#2a2a5a"}`, borderRadius:"6px", color:copied===id?"#4ade80":"#6060c0", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
-          {copied===id ? "✓ تم النسخ" : "نسخ"}
-        </button>
+        <div style={{ display:"flex", gap:"6px" }}>
+          {onGenerate && (
+            <button onClick={() => onGenerate(prompt, id)} disabled={isGenerating}
+              style={{ padding:"4px 12px", background:isGenerating?"#1a1a2e":"linear-gradient(135deg,#7c3aed,#db2777)", border:"none", borderRadius:"6px", color:isGenerating?"#666":"#fff", fontSize:"11px", cursor:isGenerating?"not-allowed":"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+              {isGenerating ? "جاري التوليد..." : "🎨 ولّد الصورة"}
+            </button>
+          )}
+          <button onClick={() => onCopy(prompt, id)}
+            style={{ padding:"4px 12px", background:copied===id?"#1a3a1a":"#1a1a3a", border:`1px solid ${copied===id?"#4ade80":"#2a2a5a"}`, borderRadius:"6px", color:copied===id?"#4ade80":"#6060c0", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
+            {copied===id ? "✓ تم النسخ" : "نسخ"}
+          </button>
+        </div>
       </div>
-      <p style={{ fontSize:"12px", color:"#8080b0", lineHeight:"1.7", margin:0, direction:"ltr", textAlign:"left", whiteSpace:"pre-wrap" }}>{prompt}</p>
+      <p style={{ fontSize:"12px", color:"#8080b0", lineHeight:"1.7", margin:"0 0 12px", direction:"ltr", textAlign:"left", whiteSpace:"pre-wrap" }}>{prompt}</p>
+      {genImage && (
+        <div style={{ borderTop:"1px solid #1e1e3a", paddingTop:"12px" }}>
+          <img src={genImage} alt="Generated" style={{ width:"100%", borderRadius:"8px", border:"1px solid #2a2a4e" }} />
+          <a href={genImage} download={`${id}_generated.jpg`} target="_blank" rel="noopener noreferrer"
+            style={{ display:"inline-block", marginTop:"8px", padding:"5px 14px", background:"#1a1a3a", border:"1px solid #2a2a5a", borderRadius:"6px", color:"#a78bfa", fontSize:"11px", textDecoration:"none" }}>
+            ⬇ تنزيل الصورة
+          </a>
+        </div>
+      )}
     </div>
   );
 }

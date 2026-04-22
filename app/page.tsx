@@ -1313,6 +1313,7 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, SYSTEM_PROMPT, 
   const [dimH, setDimH]                 = useState("");
   const [envStyle, setEnvStyle]         = useState("Luxury Modern");
   const [labelLang, setLabelLang]       = useState("Arabic");
+  const [apiKey, setApiKey]             = useState(() => localStorage.getItem("anthropic_key") || "");
   const [notes, setNotes]               = useState("");
   const [loading, setLoading]           = useState(false);
   const [result, setResult]             = useState<any>(null);
@@ -1350,8 +1351,10 @@ Label language: ${labelLang}
 Notes: ${notes||"none"}
 Image URL: ${imageUrl||"not provided"}` });
     try {
+      const apiKey = (window as any).__ANTHROPIC_KEY__ || localStorage.getItem("anthropic_key") || "";
+      if (apiKey) localStorage.setItem("anthropic_key", apiKey);
       const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{"Content-Type":"application/json"},
+        method:"POST", headers:{"Content-Type":"application/json", "x-api-key": apiKey, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true"},
         body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000, system: SYSTEM_PROMPT, messages:[{role:"user",content:userContent}] })
       });
       const data = await res.json();
@@ -1444,7 +1447,15 @@ Image URL: ${imageUrl||"not provided"}` });
                 style={{ ...inStyle, resize:"none" }} />
             </div>
 
-            <button onClick={handleGenerate} disabled={loading || (!imageBase64 && !imageUrl && !category)}
+            <div>
+              <p style={{ fontSize:"12px", color:"#6060a0", margin:"0 0 5px", fontWeight:"600" }}>🔑 Anthropic API Key</p>
+              <input value={apiKey} onChange={e => { setApiKey(e.target.value); localStorage.setItem("anthropic_key", e.target.value); }}
+                placeholder="sk-ant-..." type="password"
+                style={{ ...inStyle, direction:"ltr", textAlign:"left", fontFamily:"monospace", fontSize:"11px" }} />
+              <p style={{ fontSize:"10px", color:"#3030a0", margin:"4px 0 0" }}>يُحفظ تلقائياً في المتصفح</p>
+            </div>
+
+            <button onClick={handleGenerate} disabled={loading || (!imageBase64 && !imageUrl && !category) || !apiKey}
               style={{ width:"100%", padding:"13px", background:loading?"#1a1a3a":"linear-gradient(135deg,#7c3aed,#db2777)", border:"none", borderRadius:"10px", color:loading?"#5050a0":"#fff", fontSize:"14px", fontWeight:"800", cursor:loading?"not-allowed":"pointer", fontFamily:"inherit" }}>
               {loading ? "جاري التوليد..." : "✨ توليد الـ Prompts"}
             </button>

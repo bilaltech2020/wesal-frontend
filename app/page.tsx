@@ -969,6 +969,127 @@ export default function Home() {
               </div>
             </div>
 
+
+            {/* ── الموظفون ── */}
+            {d?.employee_performance?.employees?.length > 0 && (
+              <div style={{background:"#f5f5fb",border:"1px solid #e0e0f0",borderRadius:"14px",padding:"18px",marginTop:"12px"}}>
+                <div style={{fontSize:"14px",fontWeight:"700",marginBottom:"12px",display:"flex",alignItems:"center",gap:"8px"}}>
+                  👥 أداء الموظفين
+                  <span style={{fontSize:"11px",color:"#888",fontWeight:"400"}}>{d.employee_performance.total_orders} طلب إجمالي</span>
+                </div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
+                    <thead><tr style={{background:"#ebebf7"}}>
+                      {["الموظف","الطلبات","الإيراد (ر.س)","معدل يومي","سرعة التنفيذ"].map(h=>(
+                        <th key={h} style={{padding:"8px 12px",textAlign:"right",fontWeight:"600",color:"#555",borderBottom:"1px solid #e0e0f0"}}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {d.employee_performance.employees.map((e:any,i:number)=>(
+                        <tr key={i} style={{borderBottom:"1px solid #ebebf7",background:i%2===0?"#fff":"#f8f8fd"}}>
+                          <td style={{padding:"8px 12px",fontWeight:"600",color:"#1a1a2e"}}>{e.employee}</td>
+                          <td style={{padding:"8px 12px",color:"#7c3aed",fontWeight:"700"}}>{e.orders}</td>
+                          <td style={{padding:"8px 12px"}}>{(e.revenue||0).toLocaleString("ar-SA")}</td>
+                          <td style={{padding:"8px 12px"}}>
+                            <span style={{background:"#f0eafc",color:"#7c3aed",padding:"2px 8px",borderRadius:"10px",fontSize:"11px"}}>{e.daily_avg} طلب/يوم</span>
+                          </td>
+                          <td style={{padding:"8px 12px"}}>
+                            {e.avg_exec_days != null
+                              ? <span style={{background:e.avg_exec_days<=2?"#edfaed":e.avg_exec_days<=5?"#fff8e0":"#fdeaea",color:e.avg_exec_days<=2?"#1d9e75":e.avg_exec_days<=5?"#ef9f27":"#e24b4a",padding:"2px 8px",borderRadius:"10px",fontSize:"11px"}}>{e.avg_exec_days} يوم</span>
+                              : <span style={{color:"#aaa",fontSize:"11px"}}>—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── سرعة المشتريات ── */}
+            {d?.procurement_speed && (
+              <div style={{background:"#f5f5fb",border:"1px solid #e0e0f0",borderRadius:"14px",padding:"18px",marginTop:"12px"}}>
+                <div style={{fontSize:"14px",fontWeight:"700",marginBottom:"12px",display:"flex",alignItems:"center",gap:"10px"}}>
+                  🏭 سرعة إصدار أوامر الشراء
+                  <div style={{display:"flex",gap:"8px"}}>
+                    <span style={{background:"#f0eafc",color:"#7c3aed",padding:"3px 12px",borderRadius:"20px",fontSize:"12px"}}>متوسط: {d.procurement_speed.avg_days_to_delivery} يوم</span>
+                    <span style={{background:"#ebebf7",color:"#555",padding:"3px 12px",borderRadius:"20px",fontSize:"12px"}}>{d.procurement_speed.total_pos} PO</span>
+                  </div>
+                </div>
+                {d.procurement_speed.details?.length > 0 && (
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
+                      <thead><tr style={{background:"#ebebf7"}}>
+                        {["رقم PO","المورد","أُصدر بواسطة","تاريخ الإصدار","أيام للتسليم","المبلغ"].map(h=>(
+                          <th key={h} style={{padding:"8px 12px",textAlign:"right",fontWeight:"600",color:"#555",borderBottom:"1px solid #e0e0f0"}}>{h}</th>
+                        ))}
+                      </tr></thead>
+                      <tbody>
+                        {d.procurement_speed.details.map((p:any,i:number)=>(
+                          <tr key={i} style={{borderBottom:"1px solid #ebebf7",background:i%2===0?"#fff":"#f8f8fd"}}>
+                            <td style={{padding:"8px 12px",color:"#7c3aed",fontFamily:"monospace",fontSize:"11px"}}>{p.po}</td>
+                            <td style={{padding:"8px 12px"}}>{p.supplier}</td>
+                            <td style={{padding:"8px 12px",color:"#888"}}>{p.issued_by}</td>
+                            <td style={{padding:"8px 12px",color:"#888",fontSize:"11px"}}>{p.date}</td>
+                            <td style={{padding:"8px 12px"}}>
+                              <span style={{background:p.days_to_delivery<=7?"#edfaed":p.days_to_delivery<=14?"#fff8e0":"#fdeaea",color:p.days_to_delivery<=7?"#1d9e75":p.days_to_delivery<=14?"#ef9f27":"#e24b4a",padding:"2px 8px",borderRadius:"10px",fontSize:"11px"}}>{p.days_to_delivery} يوم</span>
+                            </td>
+                            <td style={{padding:"8px 12px",fontWeight:"600"}}>{(p.amount||0).toLocaleString("ar-SA")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── سرعة الشحن ── */}
+            {d?.shipping_speed && (
+              <div style={{background:"#f5f5fb",border:"1px solid #e0e0f0",borderRadius:"14px",padding:"18px",marginTop:"12px"}}>
+                <div style={{fontSize:"14px",fontWeight:"700",marginBottom:"12px",display:"flex",alignItems:"center",gap:"10px"}}>
+                  🚚 سرعة الشحن والتوصيل
+                  <div style={{display:"flex",gap:"8px"}}>
+                    <span style={{background:"#f0eafc",color:"#7c3aed",padding:"3px 12px",borderRadius:"20px",fontSize:"12px"}}>متوسط DN: {d.shipping_speed.avg_dn_days} يوم</span>
+                    {d.shipping_speed.avg_shipment_days != null && (
+                      <span style={{background:"#e8f0fc",color:"#2563eb",padding:"3px 12px",borderRadius:"20px",fontSize:"12px"}}>متوسط Shipment: {d.shipping_speed.avg_shipment_days} يوم</span>
+                    )}
+                    <span style={{background:"#ebebf7",color:"#555",padding:"3px 12px",borderRadius:"20px",fontSize:"12px"}}>{d.shipping_speed.dn_count} DN</span>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+                  {d.shipping_speed.slowest_dns?.length > 0 && (
+                    <div>
+                      <div style={{fontSize:"12px",fontWeight:"600",color:"#e24b4a",marginBottom:"8px"}}>🐢 الأبطأ (تحتاج مراجعة)</div>
+                      {d.shipping_speed.slowest_dns.map((dn:any,i:number)=>(
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:i%2===0?"#fff":"#f8f8fd",borderRadius:"6px",marginBottom:"4px",fontSize:"11px"}}>
+                          <div>
+                            <span style={{color:"#7c3aed",fontFamily:"monospace"}}>{dn.dn}</span>
+                            {dn.carrier && dn.carrier!=="—" && <span style={{color:"#888",marginRight:"6px"}}> · {dn.carrier}</span>}
+                          </div>
+                          <span style={{background:"#fdeaea",color:"#e24b4a",padding:"2px 8px",borderRadius:"10px",fontWeight:"600"}}>{dn.days} يوم</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {d.shipping_speed.fastest_dns?.length > 0 && (
+                    <div>
+                      <div style={{fontSize:"12px",fontWeight:"600",color:"#1d9e75",marginBottom:"8px"}}>⚡ الأسرع</div>
+                      {d.shipping_speed.fastest_dns.map((dn:any,i:number)=>(
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:i%2===0?"#fff":"#f8f8fd",borderRadius:"6px",marginBottom:"4px",fontSize:"11px"}}>
+                          <div>
+                            <span style={{color:"#7c3aed",fontFamily:"monospace"}}>{dn.dn}</span>
+                            {dn.carrier && dn.carrier!=="—" && <span style={{color:"#888",marginRight:"6px"}}> · {dn.carrier}</span>}
+                          </div>
+                          <span style={{background:"#edfaed",color:"#1d9e75",padding:"2px 8px",borderRadius:"10px",fontWeight:"600"}}>{dn.days} يوم</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
           {/* AI Chat */}
           <div style={{background:"#f8f8fd",border:"1px solid #e0e0f0",borderRadius:"16px",marginTop:"20px",overflow:"hidden"}}>
           <div style={{padding:"12px 18px",borderBottom:"1px solid #e8e8f4",display:"flex",alignItems:"center",gap:"10px",background:"linear-gradient(135deg,#f0eafc,#e8f0fc)"}}>

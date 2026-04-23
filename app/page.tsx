@@ -147,9 +147,9 @@ export default function Home() {
   const [erpLoading, setErpLoading]  = useState(false);
   const [erpError, setErpError]      = useState("");
   const [lastFetched, setLastFetched]= useState("");
-  const [timePeriod, setTimePeriod]  = useState("month");
+  const [timePeriod, setTimePeriod]  = useState(2); // 0=today,1=week,2=month,3=quarter,4=year
 
-  const fetchKpis = async (period = timePeriod) => {
+  const fetchKpis = async (period = ["today","week","month","quarter","year"][timePeriod] as string) => {
     setErpLoading(true); setErpError("");
     try {
       const res = await fetch(`${API_URL}/erpnext-kpis?period=${period}`);
@@ -907,7 +907,7 @@ export default function Home() {
               </div>
               <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
                 {["اليوم","الأسبوع","الشهر","الربع","السنة"].map((p,i)=>(
-                  <button key={p} onClick={()=>{setTimePeriod(i);fetchKpis(i);}} style={{padding:"5px 12px",background:timePeriod===i?"#1a1a2e":"transparent",border:`1px solid ${timePeriod===i?"#7c3aed":"#d0d0ec"}`,borderRadius:"20px",color:timePeriod===i?"#7c3aed":"#666",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
+                  <button key={p} onClick={()=>{setTimePeriod(i);fetchKpis(["today","week","month","quarter","year"][i]);}} style={{padding:"5px 12px",background:timePeriod===i?"#7c3aed":"transparent",border:`1px solid ${timePeriod===i?"#7c3aed":"#d0d0ec"}`,borderRadius:"20px",color:timePeriod===i?"#fff":"#666",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>{p}</button>
                 ))}
                 <button onClick={()=>fetchKpis()} disabled={erpLoading} style={{padding:"5px 14px",background:"#1a1a2e",border:"1px solid #c8b8ff",borderRadius:"20px",color:"#7c3aed",fontSize:"12px",cursor:"pointer",fontFamily:"inherit",marginRight:"4px"}}>↻ تحديث</button>
               </div>
@@ -969,9 +969,8 @@ export default function Home() {
               </div>
             </div>
 
-          </div>
-        {/* AI Chat */}
-        <div style={{background:"#f8f8fd",border:"1px solid #e0e0f0",borderRadius:"16px",marginTop:"20px",overflow:"hidden"}}>
+          {/* AI Chat */}
+          <div style={{background:"#f8f8fd",border:"1px solid #e0e0f0",borderRadius:"16px",marginTop:"20px",overflow:"hidden"}}>
           <div style={{padding:"12px 18px",borderBottom:"1px solid #e8e8f4",display:"flex",alignItems:"center",gap:"10px",background:"linear-gradient(135deg,#f0eafc,#e8f0fc)"}}>
             <span style={{fontSize:"18px"}}>🤖</span>
             <div>
@@ -1013,7 +1012,8 @@ export default function Home() {
               {reportChatLoading?"...":"إرسال ←"}
             </button>
           </div>
-        </div>
+          </div>
+          </div>
         </div>
       </div>
     );

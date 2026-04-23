@@ -142,7 +142,31 @@ export default function Home() {
   };
 
   // Reports / KPIs
-  const [activeKpi, setActiveKpi] = useState<number | null>(null);
+  const [activeKpi, setActiveKpi]   = useState<number | null>(null);
+  const [erpData, setErpData]        = useState<any>(null);
+  const [erpLoading, setErpLoading]  = useState(false);
+  const [erpError, setErpError]      = useState("");
+  const [lastFetched, setLastFetched]= useState("");
+  const [timePeriod, setTimePeriod]  = useState("month");
+
+  const fetchKpis = async (period = timePeriod) => {
+    setErpLoading(true); setErpError("");
+    try {
+      const res = await fetch(`${API_URL}/erpnext-kpis?period=${period}`);
+      const json = await res.json();
+      if (json.status === "ok") {
+        setErpData(json.data);
+        setLastFetched(new Date().toLocaleTimeString("ar-SA"));
+      } else {
+        setErpError(json.message || "خطأ في جلب البيانات");
+      }
+    } catch (e) {
+      setErpError("تعذّر الاتصال بـ ERPNext");
+    }
+    setErpLoading(false);
+  };
+
+  useEffect(() => { fetchKpis(); }, []);
 
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -1537,7 +1537,6 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
   const [envStyle, setEnvStyle]         = useState("Luxury Modern");
   const [labelLang, setLabelLang]       = useState("Arabic");
   const [notes, setNotes]               = useState("");
-  const [customPrompt, setCustomPrompt] = useState("");
   const [loading, setLoading]           = useState(false);
   const [result, setResult]             = useState<any>(null);
   const [error, setError]               = useState("");
@@ -1547,54 +1546,15 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
   const [genImages, setGenImages]       = useState<Record<string,string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // ── ضغط الصورة لـ 2MB وإزالة الكتابة ──────────────────────
-  const compressAndClean = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        const MAX_SIZE = 2 * 1024 * 1024; // 2MB
-        let quality = 0.92;
-        const canvas = document.createElement("canvas");
-        // حد أقصى للأبعاد 1920px
-        const maxDim = 1920;
-        let w = img.width, h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
-          else       { w = Math.round(w * maxDim / h); h = maxDim; }
-        }
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(url);
-        // ضغط تدريجي حتى نصل لـ 2MB
-        const compress = (q: number) => {
-          const dataUrl = canvas.toDataURL("image/jpeg", q);
-          const bytes = Math.round((dataUrl.length - 22) * 3 / 4);
-          if (bytes > MAX_SIZE && q > 0.3) {
-            compress(Math.max(q - 0.08, 0.3));
-          } else {
-            resolve(dataUrl.split(",")[1]);
-          }
-        };
-        compress(quality);
-      };
-      img.src = url;
-    });
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // preview فوري
     const reader = new FileReader();
-    reader.onload = async (ev) => {
+    reader.onload = (ev) => {
       setImagePreview(ev.target?.result as string);
+      setImageBase64((ev.target?.result as string).split(",")[1]);
     };
     reader.readAsDataURL(file);
-    // ضغط وتحويل
-    const compressed = await compressAndClean(file);
-    setImageBase64(compressed);
   };
 
   const copyText = async (text: string, key: string) => {
@@ -1602,33 +1562,12 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
     setCopied(key); setTimeout(() => setCopied(""), 2000);
   };
 
-  // ── اختيار الـ prompt الصحيح حسب التبويب ──────────────────
-  const getPromptForTab = (tab: string): string => {
-    if (!result) return "";
-    const base = (() => {
-      if (tab === "white") return result.white_background || "";
-      if (tab === "env")   return result.environment || "";
-      if (tab === "dim")   return result.dimension || "";
-      return "";
-    })();
-    // أضف remove text instruction + custom prompt
-    const removeText = "Remove any text, watermarks, logos, or written characters from the original image. ";
-    const custom = customPrompt.trim() ? ` ${customPrompt.trim()}` : "";
-    return `${removeText}${base}${custom}`;
-  };
-
   const generateImage = async (prompt: string, mode: string) => {
     setGenLoading(mode);
-    // استخدم الـ prompt المحسن
-    const enhancedPrompt = (() => {
-      const removeText = "Remove any text, watermarks, logos, or written characters from the original image. ";
-      const custom = customPrompt.trim() ? ` ${customPrompt.trim()}` : "";
-      return `${removeText}${prompt}${custom}`;
-    })();
     try {
       const res = await fetch(`${API_URL}/content-studio/generate-image`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: enhancedPrompt, image_base64: imageBase64||"", image_url: imageUrl, mode, width:1024, height:1024 })
+        body: JSON.stringify({ prompt, image_base64: imageBase64||"", image_url: imageUrl, mode, width:1024, height:1024 })
       });
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail||"خطأ"); }
       const data = await res.json();
@@ -1669,36 +1608,27 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
               <p style={{ fontSize:"12px", color:"#8080c0", margin:0 }}>توليد prompts احترافية لصور المنتجات</p>
             </div>
 
-            {/* صورة المنتج */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 6px", fontWeight:"600" }}>صورة المنتج</p>
               {imagePreview ? (
                 <div style={{ position:"relative" }}>
                   <img src={imagePreview} alt="" style={{ width:"100%", height:"140px", objectFit:"contain", background:"#fff", borderRadius:"10px", border:"1px solid #e0e0f0" }} />
                   <button onClick={() => { setImagePreview(null); setImageBase64(null); }} style={{ position:"absolute", top:6, left:6, width:22, height:22, background:"#fdeaea", border:"1px solid #f8d0d0", borderRadius:"50%", color:"#e24b4a", cursor:"pointer", fontSize:"11px" }}>✕</button>
-                  {imageBase64 && (
-                    <div style={{ position:"absolute", bottom:6, right:6, background:"rgba(0,0,0,0.5)", borderRadius:"5px", padding:"2px 6px" }}>
-                      <span style={{ fontSize:"10px", color:"#fff" }}>✅ مضغوط</span>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div onClick={() => fileRef.current?.click()} style={{ border:"2px dashed #d0d0f0", borderRadius:"10px", padding:"24px", textAlign:"center", cursor:"pointer", background:"#fff" }}>
                   <input ref={fileRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display:"none" }} />
                   <div style={{ fontSize:"24px", marginBottom:"6px" }}>📷</div>
                   <div style={{ fontSize:"12px", color:"#9090d0" }}>ارفع صورة المنتج</div>
-                  <div style={{ fontSize:"10px", color:"#b0b0e0", marginTop:"4px" }}>يُضغط تلقائياً لـ 2MB</div>
                 </div>
               )}
             </div>
 
-            {/* رابط الصورة */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>أو رابط الصورة</p>
               <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." style={{ ...iStyle, direction:"ltr", textAlign:"left" }} />
             </div>
 
-            {/* فئة المنتج */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>فئة المنتج</p>
               <select value={category} onChange={e => setCategory(e.target.value)} style={iStyle}>
@@ -1707,7 +1637,6 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
               </select>
             </div>
 
-            {/* المقاسات */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 6px", fontWeight:"600" }}>المقاسات (سم)</p>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"6px" }}>
@@ -1720,7 +1649,6 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
               </div>
             </div>
 
-            {/* أسلوب البيئة */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>أسلوب البيئة</p>
               <select value={envStyle} onChange={e => setEnvStyle(e.target.value)} style={iStyle}>
@@ -1728,7 +1656,6 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
               </select>
             </div>
 
-            {/* لغة المقاسات */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 6px", fontWeight:"600" }}>لغة المقاسات</p>
               <div style={{ display:"flex", gap:"6px" }}>
@@ -1738,20 +1665,6 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
               </div>
             </div>
 
-            {/* Custom Prompt */}
-            <div style={{ background:"#fffbf0", border:"1px solid #f0e0b0", borderRadius:"10px", padding:"10px 12px" }}>
-              <p style={{ fontSize:"12px", color:"#a07010", margin:"0 0 5px", fontWeight:"700" }}>⚡ Prompt مخصص (اختياري)</p>
-              <textarea
-                value={customPrompt}
-                onChange={e => setCustomPrompt(e.target.value)}
-                placeholder="أضف تعليمات خاصة تُضاف لكل prompt... مثال: ultra realistic, 8K, studio lighting"
-                rows={3}
-                style={{ ...iStyle, resize:"vertical", fontSize:"12px", direction:"ltr", textAlign:"left" }}
-              />
-              <p style={{ fontSize:"10px", color:"#b09040", margin:"4px 0 0" }}>يُضاف تلقائياً لكل صورة تولّدها</p>
-            </div>
-
-            {/* ملاحظات */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>ملاحظات</p>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي تفاصيل إضافية..." rows={2} style={{ ...iStyle, resize:"none" }} />
@@ -1781,14 +1694,6 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
                     <span style={{ fontSize:"12px", color:"#1d9e75" }}>✅ تم اكتشاف: {result.product_detected}</span>
                   </div>
                 )}
-
-                {/* Custom Prompt indicator */}
-                {customPrompt.trim() && (
-                  <div style={{ background:"#fffbf0", border:"1px solid #f0e0b0", borderRadius:"8px", padding:"8px 14px", marginBottom:"12px", display:"flex", alignItems:"center", gap:"8px" }}>
-                    <span style={{ fontSize:"11px", color:"#a07010" }}>⚡ Custom Prompt مفعّل — يُضاف لكل صورة</span>
-                  </div>
-                )}
-
                 <div style={{ display:"flex", borderBottom:"1px solid #e8e8f4", marginBottom:"16px" }}>
                   {tabs.map(t => (
                     <button key={t.k} onClick={() => setActiveTab(t.k)}
@@ -1798,11 +1703,11 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
                   ))}
                 </div>
 
-                {activeTab==="white" && result.white_background && <PromptBox label="⬜ White Studio Background" prompt={result.white_background} id="white" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["white"]} customPrompt={customPrompt} />}
-                {activeTab==="env"   && result.environment          && <PromptBox label={`🏠 Environment — ${envStyle}`} prompt={result.environment} id="env" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["env"]} customPrompt={customPrompt} />}
-                {activeTab==="dim"   && result.dimension            && <PromptBox label="📐 Dimension Annotation" prompt={result.dimension} id="dim" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["dim"]} customPrompt={customPrompt} />}
+                {activeTab==="white" && result.white_background && <PromptBox label="⬜ White Studio Background" prompt={result.white_background} id="white" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["white"]} />}
+                {activeTab==="env"   && result.environment          && <PromptBox label={`🏠 Environment — ${envStyle}`} prompt={result.environment} id="env" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["env"]} />}
+                {activeTab==="dim"   && result.dimension            && <PromptBox label="📐 Dimension Annotation" prompt={result.dimension} id="dim" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["dim"]} />}
                 {activeTab==="vars"  && result.environment_variations?.map((v: any, i: number) => (
-                  <PromptBox key={i} label={`🎨 ${v.style}`} prompt={v.prompt} id={`var${i}`} copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages[`var${i}`]} customPrompt={customPrompt} />
+                  <PromptBox key={i} label={`🎨 ${v.style}`} prompt={v.prompt} id={`var${i}`} copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages[`var${i}`]} />
                 ))}
                 {result.notes && <div style={{ background:"#f4f4fb", border:"1px solid #e8e8f4", borderRadius:"8px", padding:"10px 14px", marginTop:"8px" }}><span style={{ fontSize:"11px", color:"#8080c0" }}>📝 {result.notes}</span></div>}
               </>
@@ -1822,17 +1727,13 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
   );
 }
 
-function PromptBox({ label, prompt, id, copied, onCopy, onGenerate, genLoading, genImage, customPrompt }: {
+function PromptBox({ label, prompt, id, copied, onCopy, onGenerate, genLoading, genImage }: {
   label:string; prompt:string; id:string; copied:string;
   onCopy:(t:string,k:string)=>void;
   onGenerate?:(p:string,m:string)=>void;
   genLoading?:string|null;
   genImage?:string;
-  customPrompt?:string;
 }) {
-  const removeText = "Remove any text, watermarks, logos, or written characters from the original image. ";
-  const fullPrompt = `${removeText}${prompt}${customPrompt?.trim() ? " "+customPrompt.trim() : ""}`;
-
   return (
     <div style={{ background:"#fff", border:"1px solid #e8e8f4", borderRadius:"12px", padding:"16px", marginBottom:"12px" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px", gap:"8px" }}>
@@ -1844,18 +1745,13 @@ function PromptBox({ label, prompt, id, copied, onCopy, onGenerate, genLoading, 
               {genLoading===id ? "جاري التوليد..." : "🎨 ولّد الصورة"}
             </button>
           )}
-          <button onClick={() => onCopy(fullPrompt, id)}
+          <button onClick={() => onCopy(prompt, id)}
             style={{ padding:"4px 12px", background:copied===id?"#edfaed":"#f4f4fb", border:`1px solid ${copied===id?"#d0f0d0":"#e0e0f0"}`, borderRadius:"6px", color:copied===id?"#1d9e75":"#8080c0", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
             {copied===id ? "✓ تم النسخ" : "نسخ"}
           </button>
         </div>
       </div>
       <p style={{ fontSize:"12px", color:"#7070a0", lineHeight:"1.7", margin:"0 0 12px", direction:"ltr", textAlign:"left", whiteSpace:"pre-wrap" }}>{prompt}</p>
-      {customPrompt?.trim() && (
-        <div style={{ background:"#fffbf0", borderRadius:"6px", padding:"4px 10px", marginBottom:"8px" }}>
-          <span style={{ fontSize:"10px", color:"#a07010", direction:"ltr", display:"block", textAlign:"left" }}>+ {customPrompt}</span>
-        </div>
-      )}
       {genImage && (
         <div style={{ borderTop:"1px solid #e8e8f4", paddingTop:"12px" }}>
           <img src={genImage} alt="Generated" style={{ width:"100%", borderRadius:"8px", border:"1px solid #e0e0f0" }} />

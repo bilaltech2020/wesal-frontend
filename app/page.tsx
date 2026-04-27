@@ -1531,328 +1531,282 @@ export default function Home() {
 // PROMPT LIBRARY — مكتبة الأوامر
 // ══════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════
+// PROMPT LIBRARY DATA
+// ══════════════════════════════════════════════════════════════
 const INITIAL_PROMPT_LIBRARY = [
-  // ── كنب ──────────────────────────────────────────────────
-  {
-    id: "sofa_white",
-    category: "كنبة / أريكة",
-    type: "white",
-    typeLabel: "خلفية بيضاء",
-    name: "Sofa — White Studio",
-    prompt: "Professional product photography of a sofa. Pure white seamless background, soft even studio lighting from multiple angles, no harsh shadows, centered composition, front 3/4 view, commercial catalog quality, 8K resolution. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "sofa_env",
-    category: "كنبة / أريكة",
-    type: "env",
-    typeLabel: "بيئة واقعية",
-    name: "Sofa — Luxury Living Room",
-    prompt: "Luxury modern living room, sofa placed naturally on a light oak wood floor, soft natural light from large windows, minimal Scandinavian decor, warm neutral tones, no clutter, realistic interior photography, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "sofa_dim",
-    category: "كنبة / أريكة",
-    type: "dim",
-    typeLabel: "مقاسات",
-    name: "Sofa — Dimensions",
-    prompt: "Product on pure white background with professional dimension annotations, clean arrows indicating width, depth, height in centimeters, Arabic labels, minimal design, technical drawing style. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  // ── طاولات ───────────────────────────────────────────────
-  {
-    id: "table_white",
-    category: "طاولة",
-    type: "white",
-    typeLabel: "خلفية بيضاء",
-    name: "Table — White Studio",
-    prompt: "Professional product photography of a table. Pure white seamless background, top-front 3/4 view showing table surface and legs clearly, soft studio lighting, no shadows on background, e-commerce catalog style, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "table_env",
-    category: "طاولة",
-    type: "env",
-    typeLabel: "بيئة واقعية",
-    name: "Table — Modern Dining Room",
-    prompt: "Modern dining room or living space, table placed on marble or light wood floor, elegant minimal decor, soft warm lighting from ceiling and windows, no clutter around table, photorealistic interior, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "table_dim",
-    category: "طاولة",
-    type: "dim",
-    typeLabel: "مقاسات",
-    name: "Table — Dimensions",
-    prompt: "Table on pure white background, dimension arrows showing table width, depth, height and leg height in centimeters, Arabic dimension labels, clean technical annotation style. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  // ── إضاءة ────────────────────────────────────────────────
-  {
-    id: "lamp_white",
-    category: "إضاءة",
-    type: "white",
-    typeLabel: "خلفية بيضاء",
-    name: "Lamp — White Studio",
-    prompt: "Professional product photography of a lamp or lighting fixture. Pure white seamless background, lamp shown illuminated with warm glow, soft studio lighting, all design details visible, e-commerce quality, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "lamp_env",
-    category: "إضاءة",
-    type: "env",
-    typeLabel: "بيئة واقعية",
-    name: "Lamp — Cozy Bedroom",
-    prompt: "Luxury bedroom or living room corner, lamp placed on side table or floor, warm ambient lighting creating cozy atmosphere, minimal elegant decor, realistic interior photography, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "lamp_dim",
-    category: "إضاءة",
-    type: "dim",
-    typeLabel: "مقاسات",
-    name: "Lamp — Dimensions",
-    prompt: "Lamp on white background, arrows showing total height, shade diameter, base diameter in centimeters, Arabic labels, clean technical style. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  // ── كرسي ─────────────────────────────────────────────────
-  {
-    id: "chair_white",
-    category: "كرسي",
-    type: "white",
-    typeLabel: "خلفية بيضاء",
-    name: "Chair — White Studio",
-    prompt: "Professional product photography of a chair. Pure white seamless background, front 3/4 view showing seat, back and legs, soft even studio lighting, no shadows, commercial quality, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "chair_env",
-    category: "كرسي",
-    type: "env",
-    typeLabel: "بيئة واقعية",
-    name: "Chair — Modern Interior",
-    prompt: "Elegant modern living room or office, chair placed naturally on light floor, soft window lighting, minimal decor, no clutter, photorealistic, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "chair_dim",
-    category: "كرسي",
-    type: "dim",
-    typeLabel: "مقاسات",
-    name: "Chair — Dimensions",
-    prompt: "Chair on pure white background, arrows showing seat height, total height, width and depth in centimeters, Arabic labels, clean technical annotation. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  // ── سرير ─────────────────────────────────────────────────
-  {
-    id: "bed_white",
-    category: "سرير",
-    type: "white",
-    typeLabel: "خلفية بيضاء",
-    name: "Bed — White Studio",
-    prompt: "Professional product photography of a bed frame. Pure white seamless background, front 3/4 view showing headboard and frame clearly, soft studio lighting, clean commercial presentation, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "bed_env",
-    category: "سرير",
-    type: "env",
-    typeLabel: "بيئة واقعية",
-    name: "Bed — Luxury Bedroom",
-    prompt: "Luxury master bedroom, bed styled with premium neutral bedding, soft natural morning light, minimal elegant nightstands, warm tones, no clutter, photorealistic, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
-  {
-    id: "bed_dim",
-    category: "سرير",
-    type: "dim",
-    typeLabel: "مقاسات",
-    name: "Bed — Dimensions",
-    prompt: "Bed on pure white background, arrows showing total length, width, headboard height and bed height in centimeters, Arabic labels, technical annotation style. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
-  },
+  { id:"sofa_white", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", name:"Sofa — White Studio", tags:"studio,white,catalog", prompt:"Professional product photography of a sofa. Pure white seamless background, soft even studio lighting from multiple angles, no harsh shadows, centered composition, front 3/4 view, commercial catalog quality, 8K resolution. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"sofa_env",   category:"كنبة / أريكة", type:"env",   typeLabel:"بيئة واقعية",  name:"Sofa — Luxury Living Room", tags:"luxury,living,realistic", prompt:"Luxury modern living room, sofa placed naturally on a light oak wood floor, soft natural light from large windows, minimal Scandinavian decor, warm neutral tones, no clutter, realistic interior photography, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"sofa_dim",   category:"كنبة / أريكة", type:"dim",   typeLabel:"مقاسات",        name:"Sofa — Dimensions", tags:"dimensions,annotations,arabic", prompt:"Product on pure white background with professional dimension annotations, clean arrows indicating width, depth, height in centimeters, Arabic labels, minimal design, technical drawing style. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"table_white",category:"طاولة",         type:"white", typeLabel:"خلفية بيضاء", name:"Table — White Studio", tags:"studio,white,catalog", prompt:"Professional product photography of a table. Pure white seamless background, top-front 3/4 view showing table surface and legs clearly, soft studio lighting, no shadows on background, e-commerce catalog style, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"table_env",  category:"طاولة",         type:"env",   typeLabel:"بيئة واقعية",  name:"Table — Modern Dining Room", tags:"dining,modern,realistic", prompt:"Modern dining room or living space, table placed on marble or light wood floor, elegant minimal decor, soft warm lighting from ceiling and windows, no clutter around table, photorealistic interior, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"table_dim",  category:"طاولة",         type:"dim",   typeLabel:"مقاسات",        name:"Table — Dimensions", tags:"dimensions,annotations", prompt:"Table on pure white background, dimension arrows showing table width, depth, height and leg height in centimeters, Arabic dimension labels, clean technical annotation style. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"lamp_white", category:"إضاءة",         type:"white", typeLabel:"خلفية بيضاء", name:"Lamp — White Studio", tags:"lamp,studio,white", prompt:"Professional product photography of a lamp or lighting fixture. Pure white seamless background, lamp shown illuminated with warm glow, soft studio lighting, all design details visible, e-commerce quality, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"lamp_env",   category:"إضاءة",         type:"env",   typeLabel:"بيئة واقعية",  name:"Lamp — Cozy Bedroom", tags:"bedroom,cozy,ambient", prompt:"Luxury bedroom or living room corner, lamp placed on side table or floor, warm ambient lighting creating cozy atmosphere, minimal elegant decor, realistic interior photography, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"lamp_dim",   category:"إضاءة",         type:"dim",   typeLabel:"مقاسات",        name:"Lamp — Dimensions", tags:"dimensions,height,diameter", prompt:"Lamp on white background, arrows showing total height, shade diameter, base diameter in centimeters, Arabic labels, clean technical style. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"chair_white",category:"كرسي",          type:"white", typeLabel:"خلفية بيضاء", name:"Chair — White Studio", tags:"chair,studio,catalog", prompt:"Professional product photography of a chair. Pure white seamless background, front 3/4 view showing seat, back and legs, soft even studio lighting, no shadows, commercial quality, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"chair_env",  category:"كرسي",          type:"env",   typeLabel:"بيئة واقعية",  name:"Chair — Modern Interior", tags:"modern,interior,office", prompt:"Elegant modern living room or office, chair placed naturally on light floor, soft window lighting, minimal decor, no clutter, photorealistic, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"chair_dim",  category:"كرسي",          type:"dim",   typeLabel:"مقاسات",        name:"Chair — Dimensions", tags:"dimensions,seat,height", prompt:"Chair on pure white background, arrows showing seat height, total height, width and depth in centimeters, Arabic labels, clean technical annotation. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"bed_white",  category:"سرير",          type:"white", typeLabel:"خلفية بيضاء", name:"Bed — White Studio", tags:"bed,studio,white", prompt:"Professional product photography of a bed frame. Pure white seamless background, front 3/4 view showing headboard and frame clearly, soft studio lighting, clean commercial presentation, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"bed_env",    category:"سرير",          type:"env",   typeLabel:"بيئة واقعية",  name:"Bed — Luxury Bedroom", tags:"bedroom,luxury,styled", prompt:"Luxury master bedroom, bed styled with premium neutral bedding, soft natural morning light, minimal elegant nightstands, warm tones, no clutter, photorealistic, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+  { id:"bed_dim",    category:"سرير",          type:"dim",   typeLabel:"مقاسات",        name:"Bed — Dimensions", tags:"dimensions,length,width", prompt:"Bed on pure white background, arrows showing total length, width, headboard height and bed height in centimeters, Arabic labels, technical annotation style. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
 ];
 
-// ── TYPE MAPPING: tab → type key ─────────────────────────────
-const TAB_TO_TYPE: Record<string, string> = {
-  white: "white",
-  env:   "env",
-  dim:   "dim",
+const TAB_TO_TYPE: Record<string,string> = { white:"white", env:"env", dim:"dim" };
+
+const CAT_COLORS: Record<string,{bg:string,text:string}> = {
+  "كنبة / أريكة": {bg:"#EEEDFE", text:"#534AB7"},
+  "طاولة":        {bg:"#FAEEDA", text:"#854F0B"},
+  "إضاءة":        {bg:"#FAECE7", text:"#993C1D"},
+  "كرسي":         {bg:"#EAF3DE", text:"#3B6D11"},
+  "سرير":         {bg:"#E6F1FB", text:"#185FA5"},
+  "خزانة":        {bg:"#FBEAF0", text:"#993556"},
+  "ديكور":        {bg:"#F1EFE8", text:"#5F5E5A"},
+  "أخرى":         {bg:"#F1EFE8", text:"#5F5E5A"},
 };
+const TYPE_COLORS: Record<string,{bg:string,text:string}> = {
+  white: {bg:"#E6F1FB", text:"#185FA5"},
+  env:   {bg:"#E1F5EE", text:"#0F6E56"},
+  dim:   {bg:"#FAEEDA", text:"#854F0B"},
+};
+const TYPE_LABELS: Record<string,string> = { white:"خلفية بيضاء", env:"بيئة واقعية", dim:"مقاسات" };
+
+const ALL_CATEGORIES = ["كنبة / أريكة","طاولة","إضاءة","كرسي","سرير","خزانة","ديكور","أخرى"];
 
 // ══════════════════════════════════════════════════════════════
-// PROMPT LIBRARY VIEW
+// PROMPT LIBRARY VIEW — جدول + modal إضافة/تعديل
 // ══════════════════════════════════════════════════════════════
 function PromptLibraryView({ sidebarJSX }: any) {
-  const [library, setLibrary]     = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem("wesal_prompt_library");
-      return saved ? JSON.parse(saved) : INITIAL_PROMPT_LIBRARY;
-    } catch { return INITIAL_PROMPT_LIBRARY; }
-  });
+  const loadLib = () => { try { const s = localStorage.getItem("wesal_prompt_library"); return s ? JSON.parse(s) : INITIAL_PROMPT_LIBRARY; } catch { return INITIAL_PROMPT_LIBRARY; } };
+  const [library, setLibrary]     = useState<any[]>(loadLib);
   const [filterCat, setFilterCat] = useState("الكل");
   const [filterType, setFilterType] = useState("الكل");
   const [search, setSearch]       = useState("");
+  const [page, setPage]           = useState(1);
+  const [modal, setModal]         = useState<"add"|"edit"|null>(null);
   const [editItem, setEditItem]   = useState<any>(null);
-  const [showAdd, setShowAdd]     = useState(false);
-  const [newItem, setNewItem]     = useState({ name:"", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", prompt:"" });
+  const [charCount, setCharCount] = useState(0);
+  const PER_PAGE = 10;
 
-  const CATS  = ["الكل","كنبة / أريكة","طاولة","إضاءة","كرسي","سرير","خزانة","ديكور","أخرى"];
-  const TYPES = ["الكل","white","env","dim"];
-  const TYPE_LABELS: Record<string,string> = { white:"خلفية بيضاء", env:"بيئة واقعية", dim:"مقاسات" };
-  const TYPE_COLORS: Record<string,string> = { white:"#e8f4ff", env:"#edfaed", dim:"#fff8e8" };
-  const TYPE_TEXT: Record<string,string>   = { white:"#2563eb", env:"#1d9e75", dim:"#a07010" };
-
-  const saveLibrary = (items: any[]) => {
-    setLibrary(items);
-    try { localStorage.setItem("wesal_prompt_library", JSON.stringify(items)); } catch {}
-  };
+  const saveLib = (items: any[]) => { setLibrary(items); try { localStorage.setItem("wesal_prompt_library", JSON.stringify(items)); } catch {} };
 
   const filtered = library.filter(p => {
-    const matchCat  = filterCat  === "الكل" || p.category === filterCat;
+    const matchCat  = filterCat === "الكل" || p.category === filterCat;
     const matchType = filterType === "الكل" || p.type === filterType;
-    const matchSearch = !search || p.name.includes(search) || p.prompt.includes(search);
+    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.prompt.toLowerCase().includes(search.toLowerCase()) || (p.tags||"").toLowerCase().includes(search.toLowerCase());
     return matchCat && matchType && matchSearch;
   });
+  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+  const paged = filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
 
-  const deleteItem = (id: string) => {
-    if (confirm("حذف هذا الـ Prompt؟")) saveLibrary(library.filter(p => p.id !== id));
+  const openAdd = () => {
+    setEditItem({ id:"", name:"", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", tags:"", prompt:"" });
+    setCharCount(0);
+    setModal("add");
+  };
+  const openEdit = (p: any) => { setEditItem({...p}); setCharCount(p.prompt.length); setModal("edit"); };
+
+  const saveItem = () => {
+    if (!editItem.name.trim() || !editItem.prompt.trim()) return alert("الاسم والـ Prompt مطلوبان");
+    if (modal === "add") {
+      saveLib([...library, { ...editItem, id:`custom_${Date.now()}`, typeLabel: TYPE_LABELS[editItem.type]||editItem.type }]);
+    } else {
+      saveLib(library.map(p => p.id === editItem.id ? { ...editItem, typeLabel: TYPE_LABELS[editItem.type]||editItem.type } : p));
+    }
+    setModal(null);
   };
 
-  const saveEdit = () => {
-    if (!editItem) return;
-    saveLibrary(library.map(p => p.id === editItem.id ? editItem : p));
-    setEditItem(null);
-  };
+  const deleteItem = (id: string) => { if (confirm("حذف هذا الـ Prompt؟")) saveLib(library.filter(p => p.id !== id)); setModal(null); };
 
-  const addNew = () => {
-    if (!newItem.name || !newItem.prompt) return alert("أدخل الاسم والـ Prompt");
-    const item = { ...newItem, id: `custom_${Date.now()}`, typeLabel: TYPE_LABELS[newItem.type] || newItem.type };
-    saveLibrary([...library, item]);
-    setNewItem({ name:"", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", prompt:"" });
-    setShowAdd(false);
-  };
-
-  const iStyle: React.CSSProperties = { width:"100%", padding:"8px 12px", background:"#fff", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#1a1a2e", fontSize:"13px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" };
+  const iStyle: React.CSSProperties = { width:"100%", padding:"8px 10px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-primary)", fontSize:"12px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" as any };
 
   return (
-    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"#f8f8fd", color:"#1a1a2e" }}>
+    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"var(--color-background-tertiary)", color:"var(--color-text-primary)" }}>
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
       <div style={{ display:"flex", minHeight:"100vh" }}>
         {sidebarJSX}
-        <div style={{ flex:1, padding:"28px", overflowY:"auto" }}>
+        <div style={{ flex:1, padding:"24px", overflowY:"auto" }}>
 
           {/* Header */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"24px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"20px" }}>
             <div>
-              <h1 style={{ fontSize:"22px", fontWeight:"800", margin:"0 0 4px" }}>📚 مكتبة الأوامر</h1>
-              <p style={{ fontSize:"13px", color:"#8080c0", margin:0 }}>Prompts جاهزة لتوليد صور المنتجات — مصنفة حسب الفئة والنوع</p>
+              <h1 style={{ fontSize:"20px", fontWeight:"700", margin:"0 0 3px" }}>📚 مكتبة الأوامر</h1>
+              <p style={{ fontSize:"12px", color:"var(--color-text-tertiary)", margin:0 }}>Prompts جاهزة لتوليد صور المنتجات — {library.length} prompt</p>
             </div>
-            <button onClick={() => setShowAdd(true)}
-              style={{ padding:"10px 20px", background:"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"10px", color:"#fff", fontSize:"13px", fontWeight:"700", cursor:"pointer", fontFamily:"inherit" }}>
-              + إضافة Prompt
-            </button>
+            <button onClick={openAdd} style={{ padding:"9px 18px", background:"#534AB7", color:"#EEEDFE", border:"none", borderRadius:"8px", fontSize:"13px", fontWeight:"600", cursor:"pointer", fontFamily:"inherit" }}>+ إضافة Prompt</button>
           </div>
 
           {/* Filters */}
-          <div style={{ display:"flex", gap:"10px", marginBottom:"20px", flexWrap:"wrap", alignItems:"center" }}>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث..." style={{ ...iStyle, width:"200px" }} />
-            <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ ...iStyle, width:"160px" }}>
-              {CATS.map(c => <option key={c} value={c}>{c}</option>)}
+          <div style={{ background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:"10px", padding:"12px 16px", marginBottom:"16px", display:"flex", gap:"10px", flexWrap:"wrap", alignItems:"center" }}>
+            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="🔍 بحث بالاسم أو الـ Prompt أو الوسوم..." style={{ ...iStyle, width:"220px" }} />
+            <select value={filterCat} onChange={e => { setFilterCat(e.target.value); setPage(1); }} style={{ ...iStyle, width:"150px" }}>
+              <option value="الكل">كل الفئات</option>
+              {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <div style={{ display:"flex", gap:"6px" }}>
-              {TYPES.map(t => (
-                <button key={t} onClick={() => setFilterType(t)}
-                  style={{ padding:"7px 14px", background:filterType===t?"#7c3aed":"#fff", border:`1px solid ${filterType===t?"#7c3aed":"#d0d0f0"}`, borderRadius:"8px", color:filterType===t?"#fff":"#7070b0", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>
+            <div style={{ display:"flex", gap:"5px" }}>
+              {(["الكل","white","env","dim"] as string[]).map(t => (
+                <button key={t} onClick={() => { setFilterType(t); setPage(1); }}
+                  style={{ padding:"6px 12px", background:filterType===t?"#534AB7":"var(--color-background-secondary)", border:`0.5px solid ${filterType===t?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"7px", color:filterType===t?"#EEEDFE":"var(--color-text-secondary)", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
                   {t === "الكل" ? "الكل" : TYPE_LABELS[t]}
                 </button>
               ))}
             </div>
-            <span style={{ fontSize:"12px", color:"#a0a0c0", marginRight:"auto" }}>{filtered.length} prompt</span>
+            <span style={{ fontSize:"11px", color:"var(--color-text-tertiary)", marginRight:"auto" }}>{filtered.length} نتيجة</span>
           </div>
 
-          {/* Grid */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))", gap:"16px" }}>
-            {filtered.map(p => (
-              <div key={p.id} style={{ background:"#fff", border:"1px solid #e8e8f4", borderRadius:"12px", padding:"16px", display:"flex", flexDirection:"column", gap:"10px" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                  <div>
-                    <div style={{ fontSize:"13px", fontWeight:"700", color:"#1a1a2e", marginBottom:"4px" }}>{p.name}</div>
-                    <div style={{ display:"flex", gap:"6px" }}>
-                      <span style={{ fontSize:"11px", background:"#f0f0fb", color:"#7c3aed", padding:"2px 8px", borderRadius:"20px" }}>{p.category}</span>
-                      <span style={{ fontSize:"11px", background:TYPE_COLORS[p.type]||"#f4f4fb", color:TYPE_TEXT[p.type]||"#7070b0", padding:"2px 8px", borderRadius:"20px" }}>{p.typeLabel}</span>
-                    </div>
-                  </div>
-                  <div style={{ display:"flex", gap:"6px" }}>
-                    <button onClick={() => setEditItem({...p})} style={{ padding:"4px 10px", background:"#f4f4fb", border:"1px solid #e0e0f0", borderRadius:"6px", color:"#7070b0", fontSize:"11px", cursor:"pointer" }}>تعديل</button>
-                    <button onClick={() => deleteItem(p.id)} style={{ padding:"4px 10px", background:"#fdeaea", border:"1px solid #f8d0d0", borderRadius:"6px", color:"#e24b4a", fontSize:"11px", cursor:"pointer" }}>حذف</button>
-                  </div>
-                </div>
-                <p style={{ fontSize:"11px", color:"#8080a0", lineHeight:"1.6", margin:0, direction:"ltr", textAlign:"left", display:"-webkit-box", WebkitLineClamp:3, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{p.prompt}</p>
+          {/* Table */}
+          <div style={{ background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:"10px", overflow:"hidden" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+              <thead>
+                <tr style={{ background:"var(--color-background-secondary)" }}>
+                  {["الاسم","الفئة","النوع","الـ Prompt","الوسوم","إجراء"].map((h,i) => (
+                    <th key={i} style={{ padding:"10px 14px", textAlign:i===3?"left":"right", fontWeight:"500", color:"var(--color-text-secondary)", borderBottom:"0.5px solid var(--color-border-tertiary)", whiteSpace:"nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paged.map((p, i) => (
+                  <tr key={p.id} style={{ borderBottom: i < paged.length-1 ? "0.5px solid var(--color-border-tertiary)" : "none", background: i%2===0 ? "var(--color-background-primary)" : "var(--color-background-secondary)" }}>
+                    <td style={{ padding:"10px 14px", fontWeight:"500", color:"var(--color-text-primary)", whiteSpace:"nowrap", maxWidth:"180px", overflow:"hidden", textOverflow:"ellipsis" }}>{p.name}</td>
+                    <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
+                      <span style={{ fontSize:"10px", background:(CAT_COLORS[p.category]||CAT_COLORS["أخرى"]).bg, color:(CAT_COLORS[p.category]||CAT_COLORS["أخرى"]).text, padding:"2px 8px", borderRadius:"20px" }}>{p.category}</span>
+                    </td>
+                    <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
+                      <span style={{ fontSize:"10px", background:(TYPE_COLORS[p.type]||{bg:"#f4f4fb",text:"#7070b0"}).bg, color:(TYPE_COLORS[p.type]||{bg:"#f4f4fb",text:"#7070b0"}).text, padding:"2px 8px", borderRadius:"20px" }}>{p.typeLabel}</span>
+                    </td>
+                    <td style={{ padding:"10px 14px", color:"var(--color-text-secondary)", direction:"ltr", maxWidth:"260px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.prompt}</td>
+                    <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
+                      {p.tags && <span style={{ fontSize:"10px", color:"var(--color-text-tertiary)" }}>{(p.tags||"").split(",").slice(0,2).join(", ")}</span>}
+                    </td>
+                    <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
+                      <div style={{ display:"flex", gap:"5px" }}>
+                        <button onClick={() => openEdit(p)} style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", cursor:"pointer", color:"var(--color-text-secondary)", fontFamily:"inherit" }}>تعديل</button>
+                        <button onClick={() => deleteItem(p.id)} style={{ fontSize:"10px", padding:"3px 8px", background:"#FCEBEB", border:"0.5px solid #F7C1C1", borderRadius:"5px", cursor:"pointer", color:"#A32D2D", fontFamily:"inherit" }}>حذف</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {paged.length === 0 && (
+              <div style={{ textAlign:"center", padding:"48px 0", color:"var(--color-text-tertiary)" }}>
+                <div style={{ fontSize:"32px", marginBottom:"8px" }}>📭</div>
+                <p style={{ fontSize:"13px", margin:0 }}>لا توجد نتائج</p>
               </div>
-            ))}
-          </div>
+            )}
 
-          {filtered.length === 0 && (
-            <div style={{ textAlign:"center", padding:"60px 0", color:"#b0b0d0" }}>
-              <div style={{ fontSize:"40px", marginBottom:"10px" }}>📭</div>
-              <p>لا توجد نتائج</p>
-            </div>
-          )}
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ padding:"10px 16px", borderTop:"0.5px solid var(--color-border-tertiary)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span style={{ fontSize:"11px", color:"var(--color-text-tertiary)" }}>عرض {(page-1)*PER_PAGE+1}–{Math.min(page*PER_PAGE, filtered.length)} من {filtered.length}</span>
+                <div style={{ display:"flex", gap:"5px" }}>
+                  <button onClick={() => setPage(p => Math.max(1,p-1))} disabled={page===1}
+                    style={{ padding:"5px 12px", fontSize:"11px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"6px", cursor:page===1?"not-allowed":"pointer", color:"var(--color-text-secondary)", fontFamily:"inherit", opacity:page===1?0.5:1 }}>
+                    السابق
+                  </button>
+                  {Array.from({length:Math.min(5,totalPages)},(_,i) => {
+                    const p = totalPages <= 5 ? i+1 : page <= 3 ? i+1 : page >= totalPages-2 ? totalPages-4+i : page-2+i;
+                    return (
+                      <button key={p} onClick={() => setPage(p)}
+                        style={{ padding:"5px 10px", fontSize:"11px", background:page===p?"#534AB7":"var(--color-background-secondary)", border:`0.5px solid ${page===p?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"6px", cursor:"pointer", color:page===p?"#EEEDFE":"var(--color-text-secondary)", fontFamily:"inherit" }}>
+                        {p}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setPage(p => Math.min(totalPages,p+1))} disabled={page===totalPages}
+                    style={{ padding:"5px 12px", fontSize:"11px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"6px", cursor:page===totalPages?"not-allowed":"pointer", color:"var(--color-text-secondary)", fontFamily:"inherit", opacity:page===totalPages?0.5:1 }}>
+                    التالي
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Edit Modal */}
-      {editItem && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
-          <div style={{ background:"#fff", borderRadius:"16px", padding:"28px", width:"560px", maxHeight:"80vh", overflowY:"auto", display:"flex", flexDirection:"column", gap:"14px" }}>
-            <h3 style={{ margin:0, fontSize:"16px", fontWeight:"800" }}>تعديل Prompt</h3>
-            <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الاسم</p>
-              <input value={editItem.name} onChange={e => setEditItem({...editItem, name:e.target.value})} style={iStyle} />
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
-              <div>
-                <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الفئة</p>
-                <select value={editItem.category} onChange={e => setEditItem({...editItem, category:e.target.value})} style={iStyle}>
-                  {CATS.filter(c => c !== "الكل").map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>النوع</p>
-                <select value={editItem.type} onChange={e => setEditItem({...editItem, type:e.target.value, typeLabel:TYPE_LABELS[e.target.value]||e.target.value})} style={iStyle}>
-                  {Object.entries(TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-              </div>
-            </div>
-            <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الـ Prompt</p>
-              <textarea value={editItem.prompt} onChange={e => setEditItem({...editItem, prompt:e.target.value})} rows={6} style={{ ...iStyle, resize:"vertical", direction:"ltr", textAlign:"left", fontSize:"12px" }} />
-            </div>
-            <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end" }}>
-              <button onClick={() => setEditItem(null)} style={{ padding:"9px 20px", background:"#f4f4fb", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#7070b0", cursor:"pointer", fontFamily:"inherit" }}>إلغاء</button>
-              <button onClick={saveEdit} style={{ padding:"9px 20px", background:"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"8px", color:"#fff", fontWeight:"700", cursor:"pointer", fontFamily:"inherit" }}>حفظ</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Add / Edit Modal */}
+      {modal && editItem && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
+          <div style={{ background:"var(--color-background-primary)", borderRadius:"12px", border:"0.5px solid var(--color-border-tertiary)", width:"540px", maxHeight:"90vh", overflowY:"auto", display:"flex", flexDirection:"column" }}>
 
-      {/* Add Modal */}
-      {showAdd && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
-          <div style={{ background:"#fff", borderRadius:"16px", padding:"28px", width:"560px", maxHeight:"80vh", overflowY:"auto", display:"flex", flexDirection:"column", gap:"14px" }}>
-            <h3 style={{ margin:0, fontSize:"16px", fontWeight:"800" }}>إضافة Prompt جديد</h3>
-            <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الاسم</p>
-              <input value={newItem.name} onChange={e => setNewItem({...newItem, name:e.target.value})} placeholder="مثال: Sofa — White Studio" style={iStyle} />
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+            {/* Modal Header */}
+            <div style={{ padding:"16px 20px", borderBottom:"0.5px solid var(--color-border-tertiary)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الفئة</p>
-                <select value={newItem.category} onChange={e => setNewItem({...newItem, category:e.target.value})} style={iStyle}>
-                  {CATS.filter(c => c !== "الكل").map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <p style={{ fontSize:"14px", fontWeight:"600", color:"var(--color-text-primary)", margin:"0 0 2px" }}>{modal==="add" ? "إضافة Prompt جديد" : "تعديل Prompt"}</p>
+                <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>{modal==="edit" ? editItem.name : "أضف prompt لمكتبة الأوامر"}</p>
               </div>
+              <button onClick={() => setModal(null)} style={{ width:28, height:28, background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"50%", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:"13px", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"inherit" }}>✕</button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:"14px", flex:1 }}>
+
+              {/* Name */}
               <div>
-                <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>النوع</p>
-                <select value={newItem.type} onChange={e => setNewItem({...newItem, type:e.target.value, typeLabel:TYPE_LABELS[e.target.value]||e.target.value})} style={iStyle}>
-                  {Object.entries(TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
+                <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>اسم الـ Prompt <span style={{ color:"#E24B4A" }}>*</span></p>
+                <input value={editItem.name} onChange={e => setEditItem({...editItem, name:e.target.value})} placeholder="مثال: Sofa — White Studio Premium" style={iStyle} />
+              </div>
+
+              {/* Category + Type */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+                <div>
+                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>الفئة <span style={{ color:"#E24B4A" }}>*</span></p>
+                  <select value={editItem.category} onChange={e => setEditItem({...editItem, category:e.target.value})} style={iStyle}>
+                    {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>نوع المخرج <span style={{ color:"#E24B4A" }}>*</span></p>
+                  <select value={editItem.type} onChange={e => setEditItem({...editItem, type:e.target.value, typeLabel:TYPE_LABELS[e.target.value]||e.target.value})} style={iStyle}>
+                    {Object.entries(TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Badge Preview */}
+              <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
+                <span style={{ fontSize:"10px", color:"var(--color-text-tertiary)" }}>معاينة:</span>
+                <span style={{ fontSize:"10px", background:(CAT_COLORS[editItem.category]||CAT_COLORS["أخرى"]).bg, color:(CAT_COLORS[editItem.category]||CAT_COLORS["أخرى"]).text, padding:"2px 10px", borderRadius:"20px" }}>{editItem.category}</span>
+                <span style={{ fontSize:"10px", background:(TYPE_COLORS[editItem.type]||{bg:"#f4f4fb",text:"#7070b0"}).bg, color:(TYPE_COLORS[editItem.type]||{bg:"#f4f4fb",text:"#7070b0"}).text, padding:"2px 10px", borderRadius:"20px" }}>{TYPE_LABELS[editItem.type]||editItem.type}</span>
+              </div>
+
+              {/* Prompt */}
+              <div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"5px" }}>
+                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0, fontWeight:"500" }}>نص الـ Prompt <span style={{ color:"#E24B4A" }}>*</span></p>
+                  <span style={{ fontSize:"10px", color:charCount > 1800 ? "#E24B4A" : "var(--color-text-tertiary)" }}>{charCount} / 2000</span>
+                </div>
+                <textarea
+                  value={editItem.prompt}
+                  onChange={e => { setEditItem({...editItem, prompt:e.target.value}); setCharCount(e.target.value.length); }}
+                  maxLength={2000}
+                  rows={6}
+                  style={{ ...iStyle, resize:"vertical", direction:"ltr", textAlign:"left", lineHeight:"1.6", fontSize:"11px" }}
+                  placeholder="Professional product photography of..."
+                />
+                <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:"4px 0 0" }}>تلميح: أضف دائماً — Keep the product exactly the same shape, color, material, structure.</p>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>وسوم (اختياري)</p>
+                <input value={editItem.tags||""} onChange={e => setEditItem({...editItem, tags:e.target.value})} placeholder="premium, 8K, luxury, arabic..." style={iStyle} />
+                <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:"4px 0 0" }}>افصل بين الوسوم بفاصلة — تُستخدم في البحث</p>
               </div>
             </div>
-            <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الـ Prompt</p>
-              <textarea value={newItem.prompt} onChange={e => setNewItem({...newItem, prompt:e.target.value})} rows={6} placeholder="اكتب الـ prompt هنا..." style={{ ...iStyle, resize:"vertical", direction:"ltr", textAlign:"left", fontSize:"12px" }} />
-            </div>
-            <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end" }}>
-              <button onClick={() => setShowAdd(false)} style={{ padding:"9px 20px", background:"#f4f4fb", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#7070b0", cursor:"pointer", fontFamily:"inherit" }}>إلغاء</button>
-              <button onClick={addNew} style={{ padding:"9px 20px", background:"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"8px", color:"#fff", fontWeight:"700", cursor:"pointer", fontFamily:"inherit" }}>إضافة</button>
+
+            {/* Modal Footer */}
+            <div style={{ padding:"14px 20px", borderTop:"0.5px solid var(--color-border-tertiary)", display:"flex", justifyContent:modal==="edit"?"space-between":"flex-end", alignItems:"center" }}>
+              {modal === "edit" && (
+                <button onClick={() => deleteItem(editItem.id)} style={{ padding:"8px 14px", background:"#FCEBEB", border:"0.5px solid #F7C1C1", borderRadius:"8px", color:"#A32D2D", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>حذف</button>
+              )}
+              <div style={{ display:"flex", gap:"8px" }}>
+                <button onClick={() => setModal(null)} style={{ padding:"8px 18px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-secondary)", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>إلغاء</button>
+                <button onClick={saveItem} style={{ padding:"8px 18px", background:"#534AB7", color:"#EEEDFE", border:"none", borderRadius:"8px", fontSize:"12px", fontWeight:"600", cursor:"pointer", fontFamily:"inherit" }}>
+                  {modal === "add" ? "حفظ الـ Prompt" : "حفظ التعديلات"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1862,266 +1816,284 @@ function PromptLibraryView({ sidebarJSX }: any) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// CONTENT STUDIO VIEW — يستخدم المكتبة بدل Claude
+// CONTENT STUDIO VIEW — Dropdown + Output Grid + History
 // ══════════════════════════════════════════════════════════════
 function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, API_URL }: any) {
+  const loadLib = () => { try { const s = localStorage.getItem("wesal_prompt_library"); return s ? JSON.parse(s) : INITIAL_PROMPT_LIBRARY; } catch { return INITIAL_PROMPT_LIBRARY; } };
+
   const [imagePreview, setImagePreview] = useState<string|null>(null);
   const [imageBase64, setImageBase64]   = useState<string|null>(null);
   const [imageUrl, setImageUrl]         = useState("");
   const [category, setCategory]         = useState("كنبة / أريكة");
-  const [dimW, setDimW]                 = useState("");
-  const [dimD, setDimD]                 = useState("");
-  const [dimH, setDimH]                 = useState("");
-  const [envStyle, setEnvStyle]         = useState("Luxury Modern");
+  const [activeType, setActiveType]     = useState("white");
+  const [selectedPromptId, setSelectedPromptId] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
-  const [activeTab, setActiveTab]       = useState("white");
-  const [genLoading, setGenLoading]     = useState<string|null>(null);
+  const [genLoading, setGenLoading]     = useState(false);
   const [genImages, setGenImages]       = useState<Record<string,string>>({});
-  const [copied, setCopied]             = useState("");
+  const [history, setHistory]           = useState<any[]>([]);
+  const [historyModal, setHistoryModal] = useState<any>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // جلب المكتبة
-  const getLibrary = (): any[] => {
-    try {
-      const saved = localStorage.getItem("wesal_prompt_library");
-      return saved ? JSON.parse(saved) : INITIAL_PROMPT_LIBRARY;
-    } catch { return INITIAL_PROMPT_LIBRARY; }
+  // Prompts للفئة + النوع المحدد
+  const getPromptsForSelection = () => {
+    const lib = loadLib();
+    return lib.filter((p: any) => p.category === category && p.type === activeType);
   };
 
-  // اختيار الـ prompt المناسب حسب الفئة والتبويب
-  const getPrompt = (tab: string): string => {
-    const type = TAB_TO_TYPE[tab] || tab;
-    const lib = getLibrary();
-    // بحث عن prompt مطابق للفئة والنوع
-    const match = lib.find(p => p.category === category && p.type === type);
-    if (match) return match.prompt;
-    // fallback: أي prompt من نفس النوع
-    const fallback = lib.find(p => p.type === type);
-    return fallback?.prompt || "";
-  };
+  const promptsForSelection = getPromptsForSelection();
+
+  // تحديد أول prompt تلقائياً عند تغيير الفئة أو النوع
+  const prevCatType = useRef({ category, activeType });
+  if (prevCatType.current.category !== category || prevCatType.current.activeType !== activeType) {
+    prevCatType.current = { category, activeType };
+    const newPrompts = loadLib().filter((p: any) => p.category === category && p.type === activeType);
+    if (newPrompts.length > 0) setSelectedPromptId(newPrompts[0].id);
+    else setSelectedPromptId("");
+  }
+
+  const selectedPrompt = loadLib().find((p: any) => p.id === selectedPromptId);
 
   // ضغط الصورة لـ 2MB
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const maxDim = 1920;
-        let w = img.width, h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
-          else       { w = Math.round(w * maxDim / h); h = maxDim; }
-        }
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(url);
-        const compress = (q: number) => {
-          const dataUrl = canvas.toDataURL("image/jpeg", q);
-          const bytes = Math.round((dataUrl.length - 22) * 3 / 4);
-          if (bytes > 2 * 1024 * 1024 && q > 0.3) compress(Math.max(q - 0.08, 0.3));
-          else resolve(dataUrl.split(",")[1]);
-        };
-        compress(0.92);
+  const compressImage = (file: File): Promise<string> => new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const maxDim = 1920;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) { if (w > h) { h = Math.round(h*maxDim/w); w = maxDim; } else { w = Math.round(w*maxDim/h); h = maxDim; } }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      const compress = (q: number) => {
+        const d = canvas.toDataURL("image/jpeg", q);
+        if (Math.round((d.length-22)*3/4) > 2*1024*1024 && q > 0.3) compress(Math.max(q-0.08, 0.3));
+        else resolve(d.split(",")[1]);
       };
-      img.src = url;
-    });
-  };
+      compress(0.92);
+    };
+    img.src = url;
+  });
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => setImagePreview(ev.target?.result as string);
+    reader.onload = ev => setImagePreview(ev.target?.result as string);
     reader.readAsDataURL(file);
-    const compressed = await compressImage(file);
-    setImageBase64(compressed);
+    setImageBase64(await compressImage(file));
   };
 
-  const copyText = async (text: string, key: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(key); setTimeout(() => setCopied(""), 2000);
-  };
-
-  const generateImage = async (tab: string) => {
-    const basePrompt = getPrompt(tab);
-    if (!basePrompt) return alert("لا يوجد Prompt لهذه الفئة — أضف prompt في مكتبة الأوامر");
-    setGenLoading(tab);
-    // حذف النصوص + custom prompt
+  const generateImage = async () => {
+    if (!selectedPrompt) return alert("اختر Prompt من القائمة");
+    if (!imageBase64 && !imageUrl) return alert("ارفع صورة المنتج أولاً");
+    setGenLoading(true);
     const removeText = "Remove any text, watermarks, logos, stickers or written characters from the original product image. ";
     const custom = customPrompt.trim() ? ` ${customPrompt.trim()}` : "";
-    const fullPrompt = `${removeText}${basePrompt}${custom}`;
+    const fullPrompt = `${removeText}${selectedPrompt.prompt}${custom}`;
     try {
       const res = await fetch(`${API_URL}/content-studio/generate-image`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: fullPrompt, image_base64: imageBase64||"", image_url: imageUrl, mode: tab, width:1024, height:1024 })
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ prompt:fullPrompt, image_base64:imageBase64||"", image_url:imageUrl, mode:activeType, width:1024, height:1024 })
       });
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail||"خطأ"); }
       const data = await res.json();
-      setGenImages(p => ({ ...p, [tab]: data.image_url }));
+      const key = `${selectedPromptId}_${Date.now()}`;
+      setGenImages(p => ({ ...p, [activeType]: data.image_url }));
+      setHistory(h => [{ id:key, promptName:selectedPrompt.name, category, type:activeType, typeLabel:TYPE_LABELS[activeType], imageUrl:data.image_url, time:new Date().toLocaleTimeString("ar") }, ...h.slice(0,19)]);
     } catch(e: any) { alert("خطأ: "+e.message); }
-    setGenLoading(null);
+    setGenLoading(false);
   };
 
-  const iStyle: React.CSSProperties = { width:"100%", padding:"8px 12px", background:"#fff", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#1a1a2e", fontSize:"13px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" };
-  const tabs = [{k:"white",l:"خلفية بيضاء",i:"⬜"},{k:"env",l:"بيئة واقعية",i:"🏠"},{k:"dim",l:"مقاسات",i:"📐"}];
-  const currentPrompt = getPrompt(activeTab);
+  const iStyle: React.CSSProperties = { width:"100%", padding:"8px 10px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-primary)", fontSize:"12px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" as any };
+  const types = [{k:"white",l:"خلفية بيضاء"},{k:"env",l:"بيئة واقعية"},{k:"dim",l:"مقاسات"}];
 
   return (
-    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"#f8f8fd", color:"#1a1a2e" }}>
+    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"var(--color-background-tertiary)", color:"var(--color-text-primary)" }}>
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
       <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
       <div style={{ display:"flex", minHeight:"100vh" }}>
         {sidebarJSX}
-        <div style={{ flex:1, display:"grid", gridTemplateColumns:"270px 1fr", overflow:"hidden" }}>
+        <div style={{ flex:1, display:"grid", gridTemplateColumns:"250px 1fr", overflow:"hidden" }}>
 
           {/* Left Panel */}
-          <div style={{ background:"#f0f0f8", borderLeft:"1px solid #e0e0f0", padding:"20px", overflowY:"auto", display:"flex", flexDirection:"column", gap:"12px" }}>
+          <div style={{ background:"var(--color-background-secondary)", borderLeft:"0.5px solid var(--color-border-tertiary)", padding:"18px", overflowY:"auto", display:"flex", flexDirection:"column", gap:"12px" }}>
             <div>
-              <h2 style={{ fontSize:"16px", fontWeight:"800", margin:"0 0 4px" }}>✨ Content Studio AI</h2>
-              <p style={{ fontSize:"12px", color:"#8080c0", margin:0 }}>توليد صور من مكتبة الـ Prompts</p>
+              <h2 style={{ fontSize:"15px", fontWeight:"700", margin:"0 0 3px" }}>✨ Content Studio</h2>
+              <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>توليد صور من مكتبة الـ Prompts</p>
             </div>
 
-            {/* صورة */}
+            {/* Image Upload */}
             <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 6px", fontWeight:"600" }}>صورة المنتج</p>
+              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>صورة المنتج</p>
               {imagePreview ? (
                 <div style={{ position:"relative" }}>
-                  <img src={imagePreview} alt="" style={{ width:"100%", height:"140px", objectFit:"contain", background:"#fff", borderRadius:"10px", border:"1px solid #e0e0f0" }} />
-                  <button onClick={() => { setImagePreview(null); setImageBase64(null); }} style={{ position:"absolute", top:6, left:6, width:22, height:22, background:"#fdeaea", border:"1px solid #f8d0d0", borderRadius:"50%", color:"#e24b4a", cursor:"pointer", fontSize:"11px" }}>✕</button>
-                  <div style={{ position:"absolute", bottom:6, right:6, background:"rgba(0,0,0,0.5)", borderRadius:"5px", padding:"2px 6px" }}>
-                    <span style={{ fontSize:"10px", color:"#fff" }}>✅ مضغوط 2MB</span>
+                  <img src={imagePreview} alt="" style={{ width:"100%", height:"130px", objectFit:"contain", background:"var(--color-background-primary)", borderRadius:"8px", border:"0.5px solid var(--color-border-tertiary)" }} />
+                  <button onClick={() => { setImagePreview(null); setImageBase64(null); }} style={{ position:"absolute", top:5, left:5, width:20, height:20, background:"#fdeaea", border:"0.5px solid #f8d0d0", borderRadius:"50%", color:"#e24b4a", cursor:"pointer", fontSize:"10px", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                  <div style={{ position:"absolute", bottom:5, right:5, background:"rgba(0,0,0,0.5)", borderRadius:"4px", padding:"1px 5px" }}>
+                    <span style={{ fontSize:"9px", color:"#fff" }}>✅ 2MB</span>
                   </div>
                 </div>
               ) : (
-                <div onClick={() => fileRef.current?.click()} style={{ border:"2px dashed #d0d0f0", borderRadius:"10px", padding:"24px", textAlign:"center", cursor:"pointer", background:"#fff" }}>
+                <div onClick={() => fileRef.current?.click()} style={{ border:"1.5px dashed var(--color-border-secondary)", borderRadius:"8px", padding:"20px", textAlign:"center", cursor:"pointer", background:"var(--color-background-primary)" }}>
                   <input ref={fileRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display:"none" }} />
-                  <div style={{ fontSize:"24px", marginBottom:"6px" }}>📷</div>
-                  <div style={{ fontSize:"12px", color:"#9090d0" }}>ارفع صورة المنتج</div>
-                  <div style={{ fontSize:"10px", color:"#b0b0e0", marginTop:"4px" }}>يُضغط تلقائياً لـ 2MB + تُحذف النصوص</div>
+                  <div style={{ fontSize:"22px", marginBottom:"4px" }}>📷</div>
+                  <div style={{ fontSize:"11px", color:"var(--color-text-secondary)" }}>ارفع صورة المنتج</div>
+                  <div style={{ fontSize:"9px", color:"var(--color-text-tertiary)", marginTop:"3px" }}>يُضغط لـ 2MB + تُحذف النصوص</div>
                 </div>
               )}
             </div>
 
-            {/* رابط */}
+            {/* URL */}
             <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>أو رابط الصورة</p>
+              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 4px", fontWeight:"500" }}>أو رابط الصورة</p>
               <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." style={{ ...iStyle, direction:"ltr", textAlign:"left" }} />
             </div>
 
-            {/* فئة المنتج */}
+            {/* Category */}
             <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>فئة المنتج</p>
+              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 4px", fontWeight:"500" }}>فئة المنتج</p>
               <select value={category} onChange={e => setCategory(e.target.value)} style={iStyle}>
                 {CATEGORIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
               </select>
-              {currentPrompt ? (
-                <div style={{ fontSize:"10px", color:"#1d9e75", marginTop:"4px" }}>✅ Prompt موجود في المكتبة</div>
+            </div>
+
+            {/* Output Type */}
+            <div>
+              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>نوع المخرج</p>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"4px" }}>
+                {types.map(t => (
+                  <button key={t.k} onClick={() => setActiveType(t.k)}
+                    style={{ padding:"6px 4px", fontSize:"10px", background:activeType===t.k?"#534AB7":"var(--color-background-primary)", border:`0.5px solid ${activeType===t.k?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"7px", color:activeType===t.k?"#EEEDFE":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit" }}>
+                    {t.k==="white"?"⬜":t.k==="env"?"🏠":"📐"} {t.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Prompt Dropdown */}
+            <div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"4px" }}>
+                <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0, fontWeight:"500" }}>اختر Prompt</p>
+                <span style={{ fontSize:"9px", color:promptsForSelection.length > 0 ? "var(--color-text-success)" : "#E24B4A" }}>
+                  {promptsForSelection.length > 0 ? `${promptsForSelection.length} متاح` : "لا يوجد"}
+                </span>
+              </div>
+              {promptsForSelection.length > 0 ? (
+                <select value={selectedPromptId} onChange={e => setSelectedPromptId(e.target.value)} style={iStyle}>
+                  {promptsForSelection.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
               ) : (
-                <div style={{ fontSize:"10px", color:"#e24b4a", marginTop:"4px" }}>⚠ لا يوجد Prompt لهذه الفئة — أضفه في المكتبة</div>
+                <div style={{ padding:"8px 10px", background:"#FCEBEB", border:"0.5px solid #F7C1C1", borderRadius:"8px", fontSize:"11px", color:"#A32D2D" }}>
+                  لا يوجد Prompt — أضفه في مكتبة الأوامر
+                </div>
               )}
             </div>
 
-            {/* المقاسات */}
+            {/* Custom */}
+            <div style={{ background:"#fffbf0", border:"0.5px solid #f0e0b0", borderRadius:"8px", padding:"8px 10px" }}>
+              <p style={{ fontSize:"11px", color:"#a07010", margin:"0 0 4px", fontWeight:"600" }}>⚡ إضافة مخصصة</p>
+              <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} rows={2} placeholder="ultra realistic, 8K..." style={{ ...iStyle, resize:"none", fontSize:"11px", direction:"ltr", textAlign:"left" }} />
+            </div>
+
+            {/* Generate Button */}
+            <button onClick={generateImage} disabled={genLoading || !selectedPromptId || (!imageBase64 && !imageUrl)}
+              style={{ width:"100%", padding:"10px", background:genLoading||!selectedPromptId?"#e0e0f0":"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"9px", color:genLoading||!selectedPromptId?"#9090c0":"#fff", fontSize:"13px", fontWeight:"700", cursor:genLoading||!selectedPromptId?"not-allowed":"pointer", fontFamily:"inherit" }}>
+              {genLoading ? "⏳ جاري التوليد..." : "🎨 ولّد الصورة"}
+            </button>
+          </div>
+
+          {/* Right: Output Area */}
+          <div style={{ padding:"20px", overflowY:"auto", background:"var(--color-background-tertiary)", display:"flex", flexDirection:"column", gap:"20px" }}>
+
+            {/* Output Cards */}
             <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 6px", fontWeight:"600" }}>المقاسات (سم)</p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"6px" }}>
-                {([["العرض",dimW,setDimW],["العمق",dimD,setDimD],["الارتفاع",dimH,setDimH]] as [string,string,any][]).map(([l,v,s]) => (
-                  <div key={l}>
-                    <div style={{ fontSize:"10px", color:"#9090c0", marginBottom:"3px" }}>{l}</div>
-                    <input value={v} onChange={e => s(e.target.value)} placeholder="—" style={{ ...iStyle, padding:"6px 8px" }} />
+              <p style={{ fontSize:"13px", fontWeight:"600", color:"var(--color-text-primary)", margin:"0 0 12px" }}>المخرجات</p>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
+                {types.map(t => (
+                  <div key={t.k} style={{ background:"var(--color-background-primary)", border:`0.5px solid ${activeType===t.k && genLoading?"#7c3aed":"var(--color-border-tertiary)"}`, borderRadius:"12px", overflow:"hidden", cursor: genImages[t.k] ? "pointer" : "default" }} onClick={() => genImages[t.k] && setHistoryModal({ promptName:t.l, imageUrl:genImages[t.k] })}>
+                    <div style={{ height:"150px", background:"var(--color-background-secondary)", display:"flex", alignItems:"center", justifyContent:"center", position:"relative", overflow:"hidden" }}>
+                      {genImages[t.k] ? (
+                        <>
+                          <img src={genImages[t.k]} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                          <div style={{ position:"absolute", top:6, right:6, background:"#1D9E75", color:"#fff", fontSize:"9px", padding:"2px 7px", borderRadius:"10px" }}>مكتمل</div>
+                        </>
+                      ) : activeType===t.k && genLoading ? (
+                        <div style={{ textAlign:"center" }}>
+                          <div style={{ width:24, height:24, border:"2px solid var(--color-border-secondary)", borderTopColor:"#7c3aed", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 6px" }} />
+                          <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>جاري التوليد...</p>
+                        </div>
+                      ) : (
+                        <div style={{ textAlign:"center", opacity:0.4 }}>
+                          <div style={{ fontSize:"24px", marginBottom:"4px" }}>{t.k==="white"?"⬜":t.k==="env"?"🏠":"📐"}</div>
+                          <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>لم يُولَّد بعد</p>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ padding:"8px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                      <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0 }}>{t.l}</p>
+                      {genImages[t.k] && (
+                        <a href={genImages[t.k]} download={`${t.k}_generated.jpg`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                          style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", color:"var(--color-text-secondary)", textDecoration:"none" }}>
+                          ⬇ تنزيل
+                        </a>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Custom Prompt */}
-            <div style={{ background:"#fffbf0", border:"1px solid #f0e0b0", borderRadius:"10px", padding:"10px 12px" }}>
-              <p style={{ fontSize:"12px", color:"#a07010", margin:"0 0 5px", fontWeight:"700" }}>⚡ إضافة مخصصة (اختياري)</p>
-              <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} placeholder="ultra realistic, 8K, studio lighting..." rows={2} style={{ ...iStyle, resize:"none", fontSize:"12px", direction:"ltr", textAlign:"left" }} />
-            </div>
-          </div>
-
-          {/* Right: Tabs + Generate */}
-          <div style={{ padding:"24px", overflowY:"auto", background:"#f8f8fd" }}>
-
-            {/* Tabs */}
-            <div style={{ display:"flex", borderBottom:"1px solid #e8e8f4", marginBottom:"20px" }}>
-              {tabs.map(t => (
-                <button key={t.k} onClick={() => setActiveTab(t.k)}
-                  style={{ padding:"10px 20px", background:"none", border:"none", borderBottom:activeTab===t.k?"2px solid #7c3aed":"2px solid transparent", color:activeTab===t.k?"#7c3aed":"#9090c0", fontSize:"13px", fontWeight:activeTab===t.k?"700":"400", cursor:"pointer", fontFamily:"inherit", marginBottom:"-1px" }}>
-                  {t.i} {t.l}
-                </button>
-              ))}
-            </div>
-
-            {/* Current Prompt Preview */}
-            <div style={{ background:"#fff", border:"1px solid #e8e8f4", borderRadius:"12px", padding:"16px", marginBottom:"20px" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
-                <span style={{ fontSize:"12px", fontWeight:"700", color:"#6d28d9" }}>
-                  📋 Prompt المستخدم — {tabs.find(t=>t.k===activeTab)?.l}
-                </span>
-                <div style={{ display:"flex", gap:"6px" }}>
-                  {currentPrompt && (
-                    <button onClick={() => copyText(currentPrompt, "current")}
-                      style={{ padding:"4px 12px", background:copied==="current"?"#edfaed":"#f4f4fb", border:`1px solid ${copied==="current"?"#d0f0d0":"#e0e0f0"}`, borderRadius:"6px", color:copied==="current"?"#1d9e75":"#8080c0", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
-                      {copied==="current" ? "✓ تم النسخ" : "نسخ"}
-                    </button>
-                  )}
+            {/* History */}
+            {history.length > 0 && (
+              <div>
+                <p style={{ fontSize:"13px", fontWeight:"600", color:"var(--color-text-primary)", margin:"0 0 10px" }}>آخر المخرجات</p>
+                <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
+                  {history.slice(0,8).map(h => (
+                    <div key={h.id} style={{ background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:"9px", padding:"8px 12px", display:"flex", alignItems:"center", gap:"10px", cursor:"pointer" }} onClick={() => setHistoryModal(h)}>
+                      <img src={h.imageUrl} alt="" style={{ width:42, height:42, borderRadius:"6px", objectFit:"cover", border:"0.5px solid var(--color-border-tertiary)", flexShrink:0 }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <p style={{ fontSize:"12px", fontWeight:"500", color:"var(--color-text-primary)", margin:"0 0 2px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.promptName}</p>
+                        <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>{h.category} — {h.typeLabel} — {h.time}</p>
+                      </div>
+                      <div style={{ display:"flex", gap:"5px", flexShrink:0 }}>
+                        <a href={h.imageUrl} download={`generated_${h.id}.jpg`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                          style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", color:"var(--color-text-secondary)", textDecoration:"none" }}>⬇</a>
+                        <button onClick={e => { e.stopPropagation(); setHistoryModal(h); }} style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", cursor:"pointer", color:"var(--color-text-secondary)", fontFamily:"inherit" }}>عرض</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-              {currentPrompt ? (
-                <p style={{ fontSize:"12px", color:"#7070a0", lineHeight:"1.7", margin:0, direction:"ltr", textAlign:"left" }}>{currentPrompt}</p>
-              ) : (
-                <div style={{ textAlign:"center", padding:"20px 0", color:"#c0c0e0" }}>
-                  <p style={{ fontSize:"12px", margin:0 }}>لا يوجد Prompt لهذه الفئة</p>
-                  <p style={{ fontSize:"11px", margin:"4px 0 0", color:"#b0b0d0" }}>أضف prompt من مكتبة الأوامر</p>
-                </div>
-              )}
-            </div>
-
-            {/* Generate Button */}
-            <button
-              onClick={() => generateImage(activeTab)}
-              disabled={genLoading === activeTab || (!imageBase64 && !imageUrl) || !currentPrompt}
-              style={{ width:"100%", padding:"14px", background:genLoading===activeTab||!currentPrompt?"#e0e0f0":"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"12px", color:genLoading===activeTab||!currentPrompt?"#9090c0":"#fff", fontSize:"15px", fontWeight:"800", cursor:genLoading===activeTab||!currentPrompt?"not-allowed":"pointer", fontFamily:"inherit", marginBottom:"20px" }}>
-              {genLoading===activeTab ? (
-                <span>⏳ جاري التوليد...</span>
-              ) : (
-                <span>🎨 ولّد الصورة — {tabs.find(t=>t.k===activeTab)?.l}</span>
-              )}
-            </button>
-
-            {/* Generated Image */}
-            {genImages[activeTab] && (
-              <div style={{ background:"#fff", border:"1px solid #e8e8f4", borderRadius:"12px", padding:"16px" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
-                  <span style={{ fontSize:"13px", fontWeight:"700", color:"#1d9e75" }}>✅ تم التوليد</span>
-                  <a href={genImages[activeTab]} download={`${activeTab}_generated.jpg`} target="_blank" rel="noopener noreferrer"
-                    style={{ padding:"6px 16px", background:"#f4f4fb", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#6d28d9", fontSize:"12px", textDecoration:"none", fontWeight:"600" }}>
-                    ⬇ تنزيل
-                  </a>
-                </div>
-                <img src={genImages[activeTab]} alt="Generated" style={{ width:"100%", borderRadius:"10px", border:"1px solid #e0e0f0" }} />
               </div>
             )}
 
-            {!genImages[activeTab] && !genLoading && (imageBase64 || imageUrl) && currentPrompt && (
-              <div style={{ textAlign:"center", padding:"40px 0", color:"#c0c0e0" }}>
-                <div style={{ fontSize:"40px", marginBottom:"10px" }}>🎨</div>
-                <p style={{ fontSize:"13px" }}>اضغط "ولّد الصورة" للبدء</p>
-              </div>
-            )}
-
-            {!imageBase64 && !imageUrl && (
-              <div style={{ textAlign:"center", padding:"40px 0", color:"#c0c0e0" }}>
-                <div style={{ fontSize:"40px", marginBottom:"10px", opacity:0.4 }}>📷</div>
-                <p style={{ fontSize:"13px" }}>ارفع صورة المنتج أولاً</p>
+            {!imageBase64 && !imageUrl && history.length === 0 && (
+              <div style={{ textAlign:"center", padding:"60px 0", color:"var(--color-text-tertiary)" }}>
+                <div style={{ fontSize:"44px", marginBottom:"12px", opacity:0.3 }}>🎨</div>
+                <p style={{ fontSize:"13px", margin:"0 0 4px" }}>ارفع صورة المنتج واختر الـ Prompt</p>
+                <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>يُحذف النص تلقائياً ويُولَّد من مكتبة الأوامر</p>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Image View Modal */}
+      {historyModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }} onClick={() => setHistoryModal(null)}>
+          <div style={{ background:"var(--color-background-primary)", borderRadius:"12px", padding:"16px", maxWidth:"600px", width:"90%", position:"relative" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
+              <p style={{ fontSize:"13px", fontWeight:"600", color:"var(--color-text-primary)", margin:0 }}>{historyModal.promptName}</p>
+              <div style={{ display:"flex", gap:"6px" }}>
+                <a href={historyModal.imageUrl} download="generated.jpg" target="_blank" rel="noopener noreferrer"
+                  style={{ padding:"5px 12px", background:"#534AB7", color:"#EEEDFE", borderRadius:"7px", fontSize:"11px", textDecoration:"none" }}>⬇ تنزيل</a>
+                <button onClick={() => setHistoryModal(null)} style={{ width:26, height:26, background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"50%", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:"12px", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+              </div>
+            </div>
+            <img src={historyModal.imageUrl} alt="" style={{ width:"100%", borderRadius:"8px", border:"0.5px solid var(--color-border-tertiary)" }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

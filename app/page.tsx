@@ -28,7 +28,7 @@ interface InventorySearch { id: string; sku: string; results: InventoryResult[];
 interface CompRow { id: string; sku: string; query: string; status: "idle"|"searching"|"done"|"error"; results: CompResult[]; }
 interface CompResult { competitor: string; title: string|null; price: number|null; currency: string; link: string|null; available: boolean|null; error: string|null; }
 
-type ViewType = "landing" | "login" | "register" | "dashboard" | "competitors" | "inventory" | "reports" | "content";
+type ViewType = "landing" | "login" | "register" | "dashboard" | "competitors" | "inventory" | "reports" | "content" | "library";
 
 const NAV = [
   { icon: "⬡", label: "لوحة التحكم", v: "dashboard" },
@@ -38,6 +38,7 @@ const NAV = [
   { icon: "◇", label: "التقارير", v: "reports" },
   { icon: "○", label: "الإعدادات", v: "dashboard" },
   { icon: "✨", label: "Content Studio", v: "content" },
+  { icon: "📚", label: "مكتبة الأوامر", v: "library" },
 ];
 
 const inputStyle: React.CSSProperties = {
@@ -1402,21 +1403,22 @@ export default function Home() {
       "Café Style","Office Style","Neutral Editorial"
     ];
     const CATEGORIES = [
-      "كنبة / أريكة","طاولة جانبية","طاولة قهوة","طاولة طعام",
-      "كرسي","مرآة","خزانة / وحدة TV","إضاءة","أثاث خارجي","ديكور"
+      "كنبة / أريكة","طاولة","إضاءة","كرسي","سرير",
+      "طاولة جانبية","طاولة قهوة","طاولة طعام",
+      "خزانة / وحدة TV","أثاث خارجي","ديكور","أخرى"
     ];
-    const CS_PROMPT = `You are an AI Content Studio Agent for e-commerce product image production. Generate commercial-ready image prompts while preserving the product EXACTLY. Return ONLY valid JSON:
-{"product_detected":"brief description","white_background":"complete white studio prompt","environment":"complete environment prompt","dimension":"complete dimension annotation prompt","environment_variations":[{"style":"Luxury Modern","prompt":"..."},{"style":"Warm Cozy","prompt":"..."},{"style":"Scandinavian","prompt":"..."},{"style":"Hotel Style","prompt":"..."},{"style":"Premium Arabic Interior","prompt":"..."}],"notes":"short notes if needed"}
-RULE: Every prompt must include: Keep the product exactly the same shape, color, material, structure, proportions, and design. Only change background/lighting.`;
     return (
       <ContentStudioView
         sidebarJSX={sidebarJSX}
         ENV_STYLES={ENV_STYLES}
         CATEGORIES={CATEGORIES}
-        CS_PROMPT={CS_PROMPT}
         API_URL={API_URL}
       />
     );
+  }
+
+  if (view === "library") {
+    return <PromptLibraryView sidebarJSX={sidebarJSX} />;
   }
 
   if (view === "dashboard") return (
@@ -1525,36 +1527,415 @@ RULE: Every prompt must include: Keep the product exactly the same shape, color,
 
 // ══════════════════════════════════════
 // ContentStudioView Component
-// ══════════════════════════════════════
-function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_URL }: any) {
+// ══════════════════════════════════════════════════════════════
+// PROMPT LIBRARY — مكتبة الأوامر
+// ══════════════════════════════════════════════════════════════
+
+const INITIAL_PROMPT_LIBRARY = [
+  // ── كنب ──────────────────────────────────────────────────
+  {
+    id: "sofa_white",
+    category: "كنبة / أريكة",
+    type: "white",
+    typeLabel: "خلفية بيضاء",
+    name: "Sofa — White Studio",
+    prompt: "Professional product photography of a sofa. Pure white seamless background, soft even studio lighting from multiple angles, no harsh shadows, centered composition, front 3/4 view, commercial catalog quality, 8K resolution. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "sofa_env",
+    category: "كنبة / أريكة",
+    type: "env",
+    typeLabel: "بيئة واقعية",
+    name: "Sofa — Luxury Living Room",
+    prompt: "Luxury modern living room, sofa placed naturally on a light oak wood floor, soft natural light from large windows, minimal Scandinavian decor, warm neutral tones, no clutter, realistic interior photography, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "sofa_dim",
+    category: "كنبة / أريكة",
+    type: "dim",
+    typeLabel: "مقاسات",
+    name: "Sofa — Dimensions",
+    prompt: "Product on pure white background with professional dimension annotations, clean arrows indicating width, depth, height in centimeters, Arabic labels, minimal design, technical drawing style. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  // ── طاولات ───────────────────────────────────────────────
+  {
+    id: "table_white",
+    category: "طاولة",
+    type: "white",
+    typeLabel: "خلفية بيضاء",
+    name: "Table — White Studio",
+    prompt: "Professional product photography of a table. Pure white seamless background, top-front 3/4 view showing table surface and legs clearly, soft studio lighting, no shadows on background, e-commerce catalog style, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "table_env",
+    category: "طاولة",
+    type: "env",
+    typeLabel: "بيئة واقعية",
+    name: "Table — Modern Dining Room",
+    prompt: "Modern dining room or living space, table placed on marble or light wood floor, elegant minimal decor, soft warm lighting from ceiling and windows, no clutter around table, photorealistic interior, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "table_dim",
+    category: "طاولة",
+    type: "dim",
+    typeLabel: "مقاسات",
+    name: "Table — Dimensions",
+    prompt: "Table on pure white background, dimension arrows showing table width, depth, height and leg height in centimeters, Arabic dimension labels, clean technical annotation style. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  // ── إضاءة ────────────────────────────────────────────────
+  {
+    id: "lamp_white",
+    category: "إضاءة",
+    type: "white",
+    typeLabel: "خلفية بيضاء",
+    name: "Lamp — White Studio",
+    prompt: "Professional product photography of a lamp or lighting fixture. Pure white seamless background, lamp shown illuminated with warm glow, soft studio lighting, all design details visible, e-commerce quality, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "lamp_env",
+    category: "إضاءة",
+    type: "env",
+    typeLabel: "بيئة واقعية",
+    name: "Lamp — Cozy Bedroom",
+    prompt: "Luxury bedroom or living room corner, lamp placed on side table or floor, warm ambient lighting creating cozy atmosphere, minimal elegant decor, realistic interior photography, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "lamp_dim",
+    category: "إضاءة",
+    type: "dim",
+    typeLabel: "مقاسات",
+    name: "Lamp — Dimensions",
+    prompt: "Lamp on white background, arrows showing total height, shade diameter, base diameter in centimeters, Arabic labels, clean technical style. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  // ── كرسي ─────────────────────────────────────────────────
+  {
+    id: "chair_white",
+    category: "كرسي",
+    type: "white",
+    typeLabel: "خلفية بيضاء",
+    name: "Chair — White Studio",
+    prompt: "Professional product photography of a chair. Pure white seamless background, front 3/4 view showing seat, back and legs, soft even studio lighting, no shadows, commercial quality, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "chair_env",
+    category: "كرسي",
+    type: "env",
+    typeLabel: "بيئة واقعية",
+    name: "Chair — Modern Interior",
+    prompt: "Elegant modern living room or office, chair placed naturally on light floor, soft window lighting, minimal decor, no clutter, photorealistic, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "chair_dim",
+    category: "كرسي",
+    type: "dim",
+    typeLabel: "مقاسات",
+    name: "Chair — Dimensions",
+    prompt: "Chair on pure white background, arrows showing seat height, total height, width and depth in centimeters, Arabic labels, clean technical annotation. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  // ── سرير ─────────────────────────────────────────────────
+  {
+    id: "bed_white",
+    category: "سرير",
+    type: "white",
+    typeLabel: "خلفية بيضاء",
+    name: "Bed — White Studio",
+    prompt: "Professional product photography of a bed frame. Pure white seamless background, front 3/4 view showing headboard and frame clearly, soft studio lighting, clean commercial presentation, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "bed_env",
+    category: "سرير",
+    type: "env",
+    typeLabel: "بيئة واقعية",
+    name: "Bed — Luxury Bedroom",
+    prompt: "Luxury master bedroom, bed styled with premium neutral bedding, soft natural morning light, minimal elegant nightstands, warm tones, no clutter, photorealistic, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+  {
+    id: "bed_dim",
+    category: "سرير",
+    type: "dim",
+    typeLabel: "مقاسات",
+    name: "Bed — Dimensions",
+    prompt: "Bed on pure white background, arrows showing total length, width, headboard height and bed height in centimeters, Arabic labels, technical annotation style. Keep the product exactly the same shape, color, material, structure, proportions, and design.",
+  },
+];
+
+// ── TYPE MAPPING: tab → type key ─────────────────────────────
+const TAB_TO_TYPE: Record<string, string> = {
+  white: "white",
+  env:   "env",
+  dim:   "dim",
+};
+
+// ══════════════════════════════════════════════════════════════
+// PROMPT LIBRARY VIEW
+// ══════════════════════════════════════════════════════════════
+function PromptLibraryView({ sidebarJSX }: any) {
+  const [library, setLibrary]     = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("wesal_prompt_library");
+      return saved ? JSON.parse(saved) : INITIAL_PROMPT_LIBRARY;
+    } catch { return INITIAL_PROMPT_LIBRARY; }
+  });
+  const [filterCat, setFilterCat] = useState("الكل");
+  const [filterType, setFilterType] = useState("الكل");
+  const [search, setSearch]       = useState("");
+  const [editItem, setEditItem]   = useState<any>(null);
+  const [showAdd, setShowAdd]     = useState(false);
+  const [newItem, setNewItem]     = useState({ name:"", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", prompt:"" });
+
+  const CATS  = ["الكل","كنبة / أريكة","طاولة","إضاءة","كرسي","سرير","خزانة","ديكور","أخرى"];
+  const TYPES = ["الكل","white","env","dim"];
+  const TYPE_LABELS: Record<string,string> = { white:"خلفية بيضاء", env:"بيئة واقعية", dim:"مقاسات" };
+  const TYPE_COLORS: Record<string,string> = { white:"#e8f4ff", env:"#edfaed", dim:"#fff8e8" };
+  const TYPE_TEXT: Record<string,string>   = { white:"#2563eb", env:"#1d9e75", dim:"#a07010" };
+
+  const saveLibrary = (items: any[]) => {
+    setLibrary(items);
+    try { localStorage.setItem("wesal_prompt_library", JSON.stringify(items)); } catch {}
+  };
+
+  const filtered = library.filter(p => {
+    const matchCat  = filterCat  === "الكل" || p.category === filterCat;
+    const matchType = filterType === "الكل" || p.type === filterType;
+    const matchSearch = !search || p.name.includes(search) || p.prompt.includes(search);
+    return matchCat && matchType && matchSearch;
+  });
+
+  const deleteItem = (id: string) => {
+    if (confirm("حذف هذا الـ Prompt؟")) saveLibrary(library.filter(p => p.id !== id));
+  };
+
+  const saveEdit = () => {
+    if (!editItem) return;
+    saveLibrary(library.map(p => p.id === editItem.id ? editItem : p));
+    setEditItem(null);
+  };
+
+  const addNew = () => {
+    if (!newItem.name || !newItem.prompt) return alert("أدخل الاسم والـ Prompt");
+    const item = { ...newItem, id: `custom_${Date.now()}`, typeLabel: TYPE_LABELS[newItem.type] || newItem.type };
+    saveLibrary([...library, item]);
+    setNewItem({ name:"", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", prompt:"" });
+    setShowAdd(false);
+  };
+
+  const iStyle: React.CSSProperties = { width:"100%", padding:"8px 12px", background:"#fff", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#1a1a2e", fontSize:"13px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" };
+
+  return (
+    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"#f8f8fd", color:"#1a1a2e" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+      <div style={{ display:"flex", minHeight:"100vh" }}>
+        {sidebarJSX}
+        <div style={{ flex:1, padding:"28px", overflowY:"auto" }}>
+
+          {/* Header */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"24px" }}>
+            <div>
+              <h1 style={{ fontSize:"22px", fontWeight:"800", margin:"0 0 4px" }}>📚 مكتبة الأوامر</h1>
+              <p style={{ fontSize:"13px", color:"#8080c0", margin:0 }}>Prompts جاهزة لتوليد صور المنتجات — مصنفة حسب الفئة والنوع</p>
+            </div>
+            <button onClick={() => setShowAdd(true)}
+              style={{ padding:"10px 20px", background:"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"10px", color:"#fff", fontSize:"13px", fontWeight:"700", cursor:"pointer", fontFamily:"inherit" }}>
+              + إضافة Prompt
+            </button>
+          </div>
+
+          {/* Filters */}
+          <div style={{ display:"flex", gap:"10px", marginBottom:"20px", flexWrap:"wrap", alignItems:"center" }}>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث..." style={{ ...iStyle, width:"200px" }} />
+            <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ ...iStyle, width:"160px" }}>
+              {CATS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <div style={{ display:"flex", gap:"6px" }}>
+              {TYPES.map(t => (
+                <button key={t} onClick={() => setFilterType(t)}
+                  style={{ padding:"7px 14px", background:filterType===t?"#7c3aed":"#fff", border:`1px solid ${filterType===t?"#7c3aed":"#d0d0f0"}`, borderRadius:"8px", color:filterType===t?"#fff":"#7070b0", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>
+                  {t === "الكل" ? "الكل" : TYPE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+            <span style={{ fontSize:"12px", color:"#a0a0c0", marginRight:"auto" }}>{filtered.length} prompt</span>
+          </div>
+
+          {/* Grid */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))", gap:"16px" }}>
+            {filtered.map(p => (
+              <div key={p.id} style={{ background:"#fff", border:"1px solid #e8e8f4", borderRadius:"12px", padding:"16px", display:"flex", flexDirection:"column", gap:"10px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                  <div>
+                    <div style={{ fontSize:"13px", fontWeight:"700", color:"#1a1a2e", marginBottom:"4px" }}>{p.name}</div>
+                    <div style={{ display:"flex", gap:"6px" }}>
+                      <span style={{ fontSize:"11px", background:"#f0f0fb", color:"#7c3aed", padding:"2px 8px", borderRadius:"20px" }}>{p.category}</span>
+                      <span style={{ fontSize:"11px", background:TYPE_COLORS[p.type]||"#f4f4fb", color:TYPE_TEXT[p.type]||"#7070b0", padding:"2px 8px", borderRadius:"20px" }}>{p.typeLabel}</span>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", gap:"6px" }}>
+                    <button onClick={() => setEditItem({...p})} style={{ padding:"4px 10px", background:"#f4f4fb", border:"1px solid #e0e0f0", borderRadius:"6px", color:"#7070b0", fontSize:"11px", cursor:"pointer" }}>تعديل</button>
+                    <button onClick={() => deleteItem(p.id)} style={{ padding:"4px 10px", background:"#fdeaea", border:"1px solid #f8d0d0", borderRadius:"6px", color:"#e24b4a", fontSize:"11px", cursor:"pointer" }}>حذف</button>
+                  </div>
+                </div>
+                <p style={{ fontSize:"11px", color:"#8080a0", lineHeight:"1.6", margin:0, direction:"ltr", textAlign:"left", display:"-webkit-box", WebkitLineClamp:3, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{p.prompt}</p>
+              </div>
+            ))}
+          </div>
+
+          {filtered.length === 0 && (
+            <div style={{ textAlign:"center", padding:"60px 0", color:"#b0b0d0" }}>
+              <div style={{ fontSize:"40px", marginBottom:"10px" }}>📭</div>
+              <p>لا توجد نتائج</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Edit Modal */}
+      {editItem && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
+          <div style={{ background:"#fff", borderRadius:"16px", padding:"28px", width:"560px", maxHeight:"80vh", overflowY:"auto", display:"flex", flexDirection:"column", gap:"14px" }}>
+            <h3 style={{ margin:0, fontSize:"16px", fontWeight:"800" }}>تعديل Prompt</h3>
+            <div>
+              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الاسم</p>
+              <input value={editItem.name} onChange={e => setEditItem({...editItem, name:e.target.value})} style={iStyle} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+              <div>
+                <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الفئة</p>
+                <select value={editItem.category} onChange={e => setEditItem({...editItem, category:e.target.value})} style={iStyle}>
+                  {CATS.filter(c => c !== "الكل").map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>النوع</p>
+                <select value={editItem.type} onChange={e => setEditItem({...editItem, type:e.target.value, typeLabel:TYPE_LABELS[e.target.value]||e.target.value})} style={iStyle}>
+                  {Object.entries(TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الـ Prompt</p>
+              <textarea value={editItem.prompt} onChange={e => setEditItem({...editItem, prompt:e.target.value})} rows={6} style={{ ...iStyle, resize:"vertical", direction:"ltr", textAlign:"left", fontSize:"12px" }} />
+            </div>
+            <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end" }}>
+              <button onClick={() => setEditItem(null)} style={{ padding:"9px 20px", background:"#f4f4fb", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#7070b0", cursor:"pointer", fontFamily:"inherit" }}>إلغاء</button>
+              <button onClick={saveEdit} style={{ padding:"9px 20px", background:"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"8px", color:"#fff", fontWeight:"700", cursor:"pointer", fontFamily:"inherit" }}>حفظ</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Modal */}
+      {showAdd && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
+          <div style={{ background:"#fff", borderRadius:"16px", padding:"28px", width:"560px", maxHeight:"80vh", overflowY:"auto", display:"flex", flexDirection:"column", gap:"14px" }}>
+            <h3 style={{ margin:0, fontSize:"16px", fontWeight:"800" }}>إضافة Prompt جديد</h3>
+            <div>
+              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الاسم</p>
+              <input value={newItem.name} onChange={e => setNewItem({...newItem, name:e.target.value})} placeholder="مثال: Sofa — White Studio" style={iStyle} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+              <div>
+                <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الفئة</p>
+                <select value={newItem.category} onChange={e => setNewItem({...newItem, category:e.target.value})} style={iStyle}>
+                  {CATS.filter(c => c !== "الكل").map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>النوع</p>
+                <select value={newItem.type} onChange={e => setNewItem({...newItem, type:e.target.value, typeLabel:TYPE_LABELS[e.target.value]||e.target.value})} style={iStyle}>
+                  {Object.entries(TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>الـ Prompt</p>
+              <textarea value={newItem.prompt} onChange={e => setNewItem({...newItem, prompt:e.target.value})} rows={6} placeholder="اكتب الـ prompt هنا..." style={{ ...iStyle, resize:"vertical", direction:"ltr", textAlign:"left", fontSize:"12px" }} />
+            </div>
+            <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end" }}>
+              <button onClick={() => setShowAdd(false)} style={{ padding:"9px 20px", background:"#f4f4fb", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#7070b0", cursor:"pointer", fontFamily:"inherit" }}>إلغاء</button>
+              <button onClick={addNew} style={{ padding:"9px 20px", background:"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"8px", color:"#fff", fontWeight:"700", cursor:"pointer", fontFamily:"inherit" }}>إضافة</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// CONTENT STUDIO VIEW — يستخدم المكتبة بدل Claude
+// ══════════════════════════════════════════════════════════════
+function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, API_URL }: any) {
   const [imagePreview, setImagePreview] = useState<string|null>(null);
   const [imageBase64, setImageBase64]   = useState<string|null>(null);
   const [imageUrl, setImageUrl]         = useState("");
-  const [category, setCategory]         = useState("");
+  const [category, setCategory]         = useState("كنبة / أريكة");
   const [dimW, setDimW]                 = useState("");
   const [dimD, setDimD]                 = useState("");
   const [dimH, setDimH]                 = useState("");
   const [envStyle, setEnvStyle]         = useState("Luxury Modern");
-  const [labelLang, setLabelLang]       = useState("Arabic");
-  const [notes, setNotes]               = useState("");
-  const [loading, setLoading]           = useState(false);
-  const [result, setResult]             = useState<any>(null);
-  const [error, setError]               = useState("");
+  const [customPrompt, setCustomPrompt] = useState("");
   const [activeTab, setActiveTab]       = useState("white");
-  const [copied, setCopied]             = useState("");
   const [genLoading, setGenLoading]     = useState<string|null>(null);
   const [genImages, setGenImages]       = useState<Record<string,string>>({});
+  const [copied, setCopied]             = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // جلب المكتبة
+  const getLibrary = (): any[] => {
+    try {
+      const saved = localStorage.getItem("wesal_prompt_library");
+      return saved ? JSON.parse(saved) : INITIAL_PROMPT_LIBRARY;
+    } catch { return INITIAL_PROMPT_LIBRARY; }
+  };
+
+  // اختيار الـ prompt المناسب حسب الفئة والتبويب
+  const getPrompt = (tab: string): string => {
+    const type = TAB_TO_TYPE[tab] || tab;
+    const lib = getLibrary();
+    // بحث عن prompt مطابق للفئة والنوع
+    const match = lib.find(p => p.category === category && p.type === type);
+    if (match) return match.prompt;
+    // fallback: أي prompt من نفس النوع
+    const fallback = lib.find(p => p.type === type);
+    return fallback?.prompt || "";
+  };
+
+  // ضغط الصورة لـ 2MB
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 1920;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else       { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        const compress = (q: number) => {
+          const dataUrl = canvas.toDataURL("image/jpeg", q);
+          const bytes = Math.round((dataUrl.length - 22) * 3 / 4);
+          if (bytes > 2 * 1024 * 1024 && q > 0.3) compress(Math.max(q - 0.08, 0.3));
+          else resolve(dataUrl.split(",")[1]);
+        };
+        compress(0.92);
+      };
+      img.src = url;
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setImagePreview(ev.target?.result as string);
-      setImageBase64((ev.target?.result as string).split(",")[1]);
-    };
+    reader.onload = (ev) => setImagePreview(ev.target?.result as string);
     reader.readAsDataURL(file);
+    const compressed = await compressImage(file);
+    setImageBase64(compressed);
   };
 
   const copyText = async (text: string, key: string) => {
@@ -1562,36 +1943,29 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
     setCopied(key); setTimeout(() => setCopied(""), 2000);
   };
 
-  const generateImage = async (prompt: string, mode: string) => {
-    setGenLoading(mode);
+  const generateImage = async (tab: string) => {
+    const basePrompt = getPrompt(tab);
+    if (!basePrompt) return alert("لا يوجد Prompt لهذه الفئة — أضف prompt في مكتبة الأوامر");
+    setGenLoading(tab);
+    // حذف النصوص + custom prompt
+    const removeText = "Remove any text, watermarks, logos, stickers or written characters from the original product image. ";
+    const custom = customPrompt.trim() ? ` ${customPrompt.trim()}` : "";
+    const fullPrompt = `${removeText}${basePrompt}${custom}`;
     try {
       const res = await fetch(`${API_URL}/content-studio/generate-image`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, image_base64: imageBase64||"", image_url: imageUrl, mode, width:1024, height:1024 })
+        body: JSON.stringify({ prompt: fullPrompt, image_base64: imageBase64||"", image_url: imageUrl, mode: tab, width:1024, height:1024 })
       });
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail||"خطأ"); }
       const data = await res.json();
-      setGenImages(p => ({ ...p, [mode]: data.image_url }));
-    } catch(e: any) { alert("خطأ في توليد الصورة: "+e.message); }
+      setGenImages(p => ({ ...p, [tab]: data.image_url }));
+    } catch(e: any) { alert("خطأ: "+e.message); }
     setGenLoading(null);
   };
 
-  const handleGenerate = async () => {
-    if (!imageBase64 && !imageUrl && !category) return;
-    setLoading(true); setError(""); setResult(null);
-    try {
-      const res = await fetch(`${API_URL}/content-studio/generate`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, env_style:envStyle, dim_w:dimW, dim_d:dimD, dim_h:dimH, label_lang:labelLang, notes, image_url:imageUrl, image_base64:imageBase64||"" })
-      });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.detail||"خطأ في الخادم"); }
-      setResult(await res.json()); setActiveTab("white");
-    } catch(e: any) { setError(e.message||"خطأ في التوليد"); }
-    setLoading(false);
-  };
-
   const iStyle: React.CSSProperties = { width:"100%", padding:"8px 12px", background:"#fff", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#1a1a2e", fontSize:"13px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" };
-  const tabs = [{k:"white",l:"خلفية بيضاء",i:"⬜"},{k:"env",l:"بيئة واقعية",i:"🏠"},{k:"dim",l:"مقاسات",i:"📐"},{k:"vars",l:"5 بيئات",i:"🎨"}];
+  const tabs = [{k:"white",l:"خلفية بيضاء",i:"⬜"},{k:"env",l:"بيئة واقعية",i:"🏠"},{k:"dim",l:"مقاسات",i:"📐"}];
+  const currentPrompt = getPrompt(activeTab);
 
   return (
     <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"#f8f8fd", color:"#1a1a2e" }}>
@@ -1601,42 +1975,54 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
         {sidebarJSX}
         <div style={{ flex:1, display:"grid", gridTemplateColumns:"270px 1fr", overflow:"hidden" }}>
 
-          {/* Left panel */}
+          {/* Left Panel */}
           <div style={{ background:"#f0f0f8", borderLeft:"1px solid #e0e0f0", padding:"20px", overflowY:"auto", display:"flex", flexDirection:"column", gap:"12px" }}>
             <div>
-              <h2 style={{ fontSize:"16px", fontWeight:"800", margin:"0 0 4px", color:"#1a1a2e" }}>✨ Content Studio AI</h2>
-              <p style={{ fontSize:"12px", color:"#8080c0", margin:0 }}>توليد prompts احترافية لصور المنتجات</p>
+              <h2 style={{ fontSize:"16px", fontWeight:"800", margin:"0 0 4px" }}>✨ Content Studio AI</h2>
+              <p style={{ fontSize:"12px", color:"#8080c0", margin:0 }}>توليد صور من مكتبة الـ Prompts</p>
             </div>
 
+            {/* صورة */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 6px", fontWeight:"600" }}>صورة المنتج</p>
               {imagePreview ? (
                 <div style={{ position:"relative" }}>
                   <img src={imagePreview} alt="" style={{ width:"100%", height:"140px", objectFit:"contain", background:"#fff", borderRadius:"10px", border:"1px solid #e0e0f0" }} />
                   <button onClick={() => { setImagePreview(null); setImageBase64(null); }} style={{ position:"absolute", top:6, left:6, width:22, height:22, background:"#fdeaea", border:"1px solid #f8d0d0", borderRadius:"50%", color:"#e24b4a", cursor:"pointer", fontSize:"11px" }}>✕</button>
+                  <div style={{ position:"absolute", bottom:6, right:6, background:"rgba(0,0,0,0.5)", borderRadius:"5px", padding:"2px 6px" }}>
+                    <span style={{ fontSize:"10px", color:"#fff" }}>✅ مضغوط 2MB</span>
+                  </div>
                 </div>
               ) : (
                 <div onClick={() => fileRef.current?.click()} style={{ border:"2px dashed #d0d0f0", borderRadius:"10px", padding:"24px", textAlign:"center", cursor:"pointer", background:"#fff" }}>
                   <input ref={fileRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display:"none" }} />
                   <div style={{ fontSize:"24px", marginBottom:"6px" }}>📷</div>
                   <div style={{ fontSize:"12px", color:"#9090d0" }}>ارفع صورة المنتج</div>
+                  <div style={{ fontSize:"10px", color:"#b0b0e0", marginTop:"4px" }}>يُضغط تلقائياً لـ 2MB + تُحذف النصوص</div>
                 </div>
               )}
             </div>
 
+            {/* رابط */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>أو رابط الصورة</p>
               <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." style={{ ...iStyle, direction:"ltr", textAlign:"left" }} />
             </div>
 
+            {/* فئة المنتج */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>فئة المنتج</p>
               <select value={category} onChange={e => setCategory(e.target.value)} style={iStyle}>
-                <option value="">اكتشاف تلقائي</option>
                 {CATEGORIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
               </select>
+              {currentPrompt ? (
+                <div style={{ fontSize:"10px", color:"#1d9e75", marginTop:"4px" }}>✅ Prompt موجود في المكتبة</div>
+              ) : (
+                <div style={{ fontSize:"10px", color:"#e24b4a", marginTop:"4px" }}>⚠ لا يوجد Prompt لهذه الفئة — أضفه في المكتبة</div>
+              )}
             </div>
 
+            {/* المقاسات */}
             <div>
               <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 6px", fontWeight:"600" }}>المقاسات (سم)</p>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"6px" }}>
@@ -1649,118 +2035,93 @@ function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, CS_PROMPT, API_
               </div>
             </div>
 
-            <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>أسلوب البيئة</p>
-              <select value={envStyle} onChange={e => setEnvStyle(e.target.value)} style={iStyle}>
-                {ENV_STYLES.map((s: string) => <option key={s} value={s}>{s}</option>)}
-              </select>
+            {/* Custom Prompt */}
+            <div style={{ background:"#fffbf0", border:"1px solid #f0e0b0", borderRadius:"10px", padding:"10px 12px" }}>
+              <p style={{ fontSize:"12px", color:"#a07010", margin:"0 0 5px", fontWeight:"700" }}>⚡ إضافة مخصصة (اختياري)</p>
+              <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} placeholder="ultra realistic, 8K, studio lighting..." rows={2} style={{ ...iStyle, resize:"none", fontSize:"12px", direction:"ltr", textAlign:"left" }} />
             </div>
-
-            <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 6px", fontWeight:"600" }}>لغة المقاسات</p>
-              <div style={{ display:"flex", gap:"6px" }}>
-                {["Arabic","English"].map(l => (
-                  <button key={l} onClick={() => setLabelLang(l)} style={{ flex:1, padding:"7px", background:labelLang===l?"#7c3aed":"#fff", border:`1px solid ${labelLang===l?"#7c3aed":"#d0d0f0"}`, borderRadius:"7px", color:labelLang===l?"#fff":"#7070b0", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p style={{ fontSize:"12px", color:"#7070b0", margin:"0 0 5px", fontWeight:"600" }}>ملاحظات</p>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي تفاصيل إضافية..." rows={2} style={{ ...iStyle, resize:"none" }} />
-            </div>
-
-            <button onClick={handleGenerate} disabled={loading || (!imageBase64 && !imageUrl && !category)}
-              style={{ width:"100%", padding:"13px", background:loading?"#e0e0f0":"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"10px", color:loading?"#9090c0":"#fff", fontSize:"14px", fontWeight:"800", cursor:loading?"not-allowed":"pointer", fontFamily:"inherit" }}>
-              {loading ? "جاري التوليد..." : "✨ توليد الـ Prompts"}
-            </button>
           </div>
 
-          {/* Right: Results */}
+          {/* Right: Tabs + Generate */}
           <div style={{ padding:"24px", overflowY:"auto", background:"#f8f8fd" }}>
-            {loading && (
-              <div style={{ textAlign:"center", padding:"60px 0" }}>
-                <div style={{ width:40, height:40, border:"3px solid #e0e0f0", borderTopColor:"#7c3aed", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 14px" }} />
-                <p style={{ color:"#8080c0", fontSize:"13px" }}>Claude يولد الـ prompts...</p>
+
+            {/* Tabs */}
+            <div style={{ display:"flex", borderBottom:"1px solid #e8e8f4", marginBottom:"20px" }}>
+              {tabs.map(t => (
+                <button key={t.k} onClick={() => setActiveTab(t.k)}
+                  style={{ padding:"10px 20px", background:"none", border:"none", borderBottom:activeTab===t.k?"2px solid #7c3aed":"2px solid transparent", color:activeTab===t.k?"#7c3aed":"#9090c0", fontSize:"13px", fontWeight:activeTab===t.k?"700":"400", cursor:"pointer", fontFamily:"inherit", marginBottom:"-1px" }}>
+                  {t.i} {t.l}
+                </button>
+              ))}
+            </div>
+
+            {/* Current Prompt Preview */}
+            <div style={{ background:"#fff", border:"1px solid #e8e8f4", borderRadius:"12px", padding:"16px", marginBottom:"20px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
+                <span style={{ fontSize:"12px", fontWeight:"700", color:"#6d28d9" }}>
+                  📋 Prompt المستخدم — {tabs.find(t=>t.k===activeTab)?.l}
+                </span>
+                <div style={{ display:"flex", gap:"6px" }}>
+                  {currentPrompt && (
+                    <button onClick={() => copyText(currentPrompt, "current")}
+                      style={{ padding:"4px 12px", background:copied==="current"?"#edfaed":"#f4f4fb", border:`1px solid ${copied==="current"?"#d0f0d0":"#e0e0f0"}`, borderRadius:"6px", color:copied==="current"?"#1d9e75":"#8080c0", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
+                      {copied==="current" ? "✓ تم النسخ" : "نسخ"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {currentPrompt ? (
+                <p style={{ fontSize:"12px", color:"#7070a0", lineHeight:"1.7", margin:0, direction:"ltr", textAlign:"left" }}>{currentPrompt}</p>
+              ) : (
+                <div style={{ textAlign:"center", padding:"20px 0", color:"#c0c0e0" }}>
+                  <p style={{ fontSize:"12px", margin:0 }}>لا يوجد Prompt لهذه الفئة</p>
+                  <p style={{ fontSize:"11px", margin:"4px 0 0", color:"#b0b0d0" }}>أضف prompt من مكتبة الأوامر</p>
+                </div>
+              )}
+            </div>
+
+            {/* Generate Button */}
+            <button
+              onClick={() => generateImage(activeTab)}
+              disabled={genLoading === activeTab || (!imageBase64 && !imageUrl) || !currentPrompt}
+              style={{ width:"100%", padding:"14px", background:genLoading===activeTab||!currentPrompt?"#e0e0f0":"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"12px", color:genLoading===activeTab||!currentPrompt?"#9090c0":"#fff", fontSize:"15px", fontWeight:"800", cursor:genLoading===activeTab||!currentPrompt?"not-allowed":"pointer", fontFamily:"inherit", marginBottom:"20px" }}>
+              {genLoading===activeTab ? (
+                <span>⏳ جاري التوليد...</span>
+              ) : (
+                <span>🎨 ولّد الصورة — {tabs.find(t=>t.k===activeTab)?.l}</span>
+              )}
+            </button>
+
+            {/* Generated Image */}
+            {genImages[activeTab] && (
+              <div style={{ background:"#fff", border:"1px solid #e8e8f4", borderRadius:"12px", padding:"16px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
+                  <span style={{ fontSize:"13px", fontWeight:"700", color:"#1d9e75" }}>✅ تم التوليد</span>
+                  <a href={genImages[activeTab]} download={`${activeTab}_generated.jpg`} target="_blank" rel="noopener noreferrer"
+                    style={{ padding:"6px 16px", background:"#f4f4fb", border:"1px solid #e0e0f0", borderRadius:"8px", color:"#6d28d9", fontSize:"12px", textDecoration:"none", fontWeight:"600" }}>
+                    ⬇ تنزيل
+                  </a>
+                </div>
+                <img src={genImages[activeTab]} alt="Generated" style={{ width:"100%", borderRadius:"10px", border:"1px solid #e0e0f0" }} />
               </div>
             )}
 
-            {error && <div style={{ padding:"12px 16px", background:"#fdeaea", border:"1px solid #f8d0d0", borderRadius:"10px", color:"#e24b4a", fontSize:"13px", marginBottom:"16px" }}>⚠ {error}</div>}
-
-            {result && !loading && (
-              <>
-                {result.product_detected && (
-                  <div style={{ background:"#edfaed", border:"1px solid #d0f0d0", borderRadius:"10px", padding:"10px 14px", marginBottom:"16px" }}>
-                    <span style={{ fontSize:"12px", color:"#1d9e75" }}>✅ تم اكتشاف: {result.product_detected}</span>
-                  </div>
-                )}
-                <div style={{ display:"flex", borderBottom:"1px solid #e8e8f4", marginBottom:"16px" }}>
-                  {tabs.map(t => (
-                    <button key={t.k} onClick={() => setActiveTab(t.k)}
-                      style={{ padding:"8px 14px", background:"none", border:"none", borderBottom:activeTab===t.k?"2px solid #7c3aed":"2px solid transparent", color:activeTab===t.k?"#7c3aed":"#9090c0", fontSize:"12px", fontWeight:activeTab===t.k?"700":"400", cursor:"pointer", fontFamily:"inherit", marginBottom:"-1px" }}>
-                      {t.i} {t.l}
-                    </button>
-                  ))}
-                </div>
-
-                {activeTab==="white" && result.white_background && <PromptBox label="⬜ White Studio Background" prompt={result.white_background} id="white" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["white"]} />}
-                {activeTab==="env"   && result.environment          && <PromptBox label={`🏠 Environment — ${envStyle}`} prompt={result.environment} id="env" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["env"]} />}
-                {activeTab==="dim"   && result.dimension            && <PromptBox label="📐 Dimension Annotation" prompt={result.dimension} id="dim" copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages["dim"]} />}
-                {activeTab==="vars"  && result.environment_variations?.map((v: any, i: number) => (
-                  <PromptBox key={i} label={`🎨 ${v.style}`} prompt={v.prompt} id={`var${i}`} copied={copied} onCopy={copyText} onGenerate={generateImage} genLoading={genLoading} genImage={genImages[`var${i}`]} />
-                ))}
-                {result.notes && <div style={{ background:"#f4f4fb", border:"1px solid #e8e8f4", borderRadius:"8px", padding:"10px 14px", marginTop:"8px" }}><span style={{ fontSize:"11px", color:"#8080c0" }}>📝 {result.notes}</span></div>}
-              </>
+            {!genImages[activeTab] && !genLoading && (imageBase64 || imageUrl) && currentPrompt && (
+              <div style={{ textAlign:"center", padding:"40px 0", color:"#c0c0e0" }}>
+                <div style={{ fontSize:"40px", marginBottom:"10px" }}>🎨</div>
+                <p style={{ fontSize:"13px" }}>اضغط "ولّد الصورة" للبدء</p>
+              </div>
             )}
 
-            {!result && !loading && !error && (
-              <div style={{ textAlign:"center", padding:"80px 0" }}>
-                <div style={{ fontSize:"52px", marginBottom:"14px", opacity:0.2 }}>✨</div>
-                <p style={{ color:"#9090d0", fontSize:"14px", marginBottom:"6px" }}>ارفع صورة المنتج وحدد الإعدادات</p>
-                <p style={{ color:"#b0b0e0", fontSize:"12px" }}>سيولد Claude prompts احترافية جاهزة لأدوات توليد الصور</p>
+            {!imageBase64 && !imageUrl && (
+              <div style={{ textAlign:"center", padding:"40px 0", color:"#c0c0e0" }}>
+                <div style={{ fontSize:"40px", marginBottom:"10px", opacity:0.4 }}>📷</div>
+                <p style={{ fontSize:"13px" }}>ارفع صورة المنتج أولاً</p>
               </div>
             )}
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function PromptBox({ label, prompt, id, copied, onCopy, onGenerate, genLoading, genImage }: {
-  label:string; prompt:string; id:string; copied:string;
-  onCopy:(t:string,k:string)=>void;
-  onGenerate?:(p:string,m:string)=>void;
-  genLoading?:string|null;
-  genImage?:string;
-}) {
-  return (
-    <div style={{ background:"#fff", border:"1px solid #e8e8f4", borderRadius:"12px", padding:"16px", marginBottom:"12px" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px", gap:"8px" }}>
-        <span style={{ fontSize:"12px", fontWeight:"700", color:"#6d28d9" }}>{label}</span>
-        <div style={{ display:"flex", gap:"6px" }}>
-          {onGenerate && (
-            <button onClick={() => onGenerate(prompt, id)} disabled={genLoading===id}
-              style={{ padding:"4px 12px", background:genLoading===id?"#e8e8f4":"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"6px", color:genLoading===id?"#999":"#fff", fontSize:"11px", cursor:genLoading===id?"not-allowed":"pointer", fontFamily:"inherit" }}>
-              {genLoading===id ? "جاري التوليد..." : "🎨 ولّد الصورة"}
-            </button>
-          )}
-          <button onClick={() => onCopy(prompt, id)}
-            style={{ padding:"4px 12px", background:copied===id?"#edfaed":"#f4f4fb", border:`1px solid ${copied===id?"#d0f0d0":"#e0e0f0"}`, borderRadius:"6px", color:copied===id?"#1d9e75":"#8080c0", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
-            {copied===id ? "✓ تم النسخ" : "نسخ"}
-          </button>
-        </div>
-      </div>
-      <p style={{ fontSize:"12px", color:"#7070a0", lineHeight:"1.7", margin:"0 0 12px", direction:"ltr", textAlign:"left", whiteSpace:"pre-wrap" }}>{prompt}</p>
-      {genImage && (
-        <div style={{ borderTop:"1px solid #e8e8f4", paddingTop:"12px" }}>
-          <img src={genImage} alt="Generated" style={{ width:"100%", borderRadius:"8px", border:"1px solid #e0e0f0" }} />
-          <a href={genImage} download={`${id}_generated.jpg`} target="_blank" rel="noopener noreferrer"
-            style={{ display:"inline-block", marginTop:"8px", padding:"5px 14px", background:"#f4f4fb", border:"1px solid #e0e0f0", borderRadius:"6px", color:"#6d28d9", fontSize:"11px", textDecoration:"none" }}>
-            ⬇ تنزيل الصورة
-          </a>
-        </div>
-      )}
     </div>
   );
 }

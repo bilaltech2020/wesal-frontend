@@ -824,13 +824,13 @@ export default function Home() {
                 </p>
               </div>
               <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
-                {(["today","week","month","quarter","year"] as const).map(p => (
-                  <button key={p} onClick={() => setPeriod(p)}
-                    style={{ padding:"6px 12px", background:period===p?"#534AB7":"var(--color-background-primary)", border:`0.5px solid ${period===p?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"7px", color:period===p?"#EEEDFE":"var(--color-text-secondary)", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
-                    {p==="today"?"اليوم":p==="week"?"الأسبوع":p==="month"?"الشهر":p==="quarter"?"الربع":"السنة"}
+                {(["اليوم","الأسبوع","الشهر","الربع","السنة"] as const).map((label, idx) => (
+                  <button key={idx} onClick={() => { setTimePeriod(idx); fetchKpis(["today","week","month","quarter","year"][idx]); }}
+                    style={{ padding:"6px 12px", background:timePeriod===idx?"#534AB7":"var(--color-background-primary)", border:`0.5px solid ${timePeriod===idx?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"7px", color:timePeriod===idx?"#EEEDFE":"var(--color-text-secondary)", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
+                    {label}
                   </button>
                 ))}
-                <button onClick={() => { setErpData(null); fetch(API_URL+"/erpnext-kpis?period="+period).then(r=>r.json()).then(r=>setErpData(r.data)); }}
+                <button onClick={() => fetchKpis(["today","week","month","quarter","year"][timePeriod])}
                   style={{ padding:"6px 12px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"7px", color:"var(--color-text-secondary)", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
                   ↺ تحديث
                 </button>

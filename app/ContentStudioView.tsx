@@ -1,307 +1,415 @@
 // @ts-nocheck
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const API_URL = "https://wesal-backend-production.up.railway.app";
 
-const INITIAL_PROMPT_LIBRARY = [
-  { id:"sofa_white", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", name:"Sofa — White Studio", tags:"studio,white,catalog", prompt:"Professional product photography of a sofa. Pure white seamless background, soft even studio lighting from multiple angles, no harsh shadows, centered composition, front 3/4 view, commercial catalog quality, 8K resolution. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"sofa_env",   category:"كنبة / أريكة", type:"env",   typeLabel:"بيئة واقعية",  name:"Sofa — Luxury Living Room", tags:"luxury,living,realistic", prompt:"Luxury modern living room, sofa placed naturally on a light oak wood floor, soft natural light from large windows, minimal Scandinavian decor, warm neutral tones, no clutter, realistic interior photography, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"sofa_dim",   category:"كنبة / أريكة", type:"dim",   typeLabel:"مقاسات",        name:"Sofa — Dimensions", tags:"dimensions,annotations,arabic", prompt:"Product on pure white background with professional dimension annotations, clean arrows indicating width, depth, height in centimeters, Arabic labels, minimal design, technical drawing style. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"table_white",category:"طاولة",         type:"white", typeLabel:"خلفية بيضاء", name:"Table — White Studio", tags:"studio,white,catalog", prompt:"Professional product photography of a table. Pure white seamless background, top-front 3/4 view showing table surface and legs clearly, soft studio lighting, no shadows on background, e-commerce catalog style, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"table_env",  category:"طاولة",         type:"env",   typeLabel:"بيئة واقعية",  name:"Table — Modern Dining Room", tags:"dining,modern,realistic", prompt:"Modern dining room or living space, table placed on marble or light wood floor, elegant minimal decor, soft warm lighting from ceiling and windows, no clutter around table, photorealistic interior, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"table_dim",  category:"طاولة",         type:"dim",   typeLabel:"مقاسات",        name:"Table — Dimensions", tags:"dimensions,annotations", prompt:"Table on pure white background, dimension arrows showing table width, depth, height and leg height in centimeters, Arabic dimension labels, clean technical annotation style. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"lamp_white", category:"إضاءة",         type:"white", typeLabel:"خلفية بيضاء", name:"Lamp — White Studio", tags:"lamp,studio,white", prompt:"Professional product photography of a lamp or lighting fixture. Pure white seamless background, lamp shown illuminated with warm glow, soft studio lighting, all design details visible, e-commerce quality, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"lamp_env",   category:"إضاءة",         type:"env",   typeLabel:"بيئة واقعية",  name:"Lamp — Cozy Bedroom", tags:"bedroom,cozy,ambient", prompt:"Luxury bedroom or living room corner, lamp placed on side table or floor, warm ambient lighting creating cozy atmosphere, minimal elegant decor, realistic interior photography, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"lamp_dim",   category:"إضاءة",         type:"dim",   typeLabel:"مقاسات",        name:"Lamp — Dimensions", tags:"dimensions,height,diameter", prompt:"Lamp on white background, arrows showing total height, shade diameter, base diameter in centimeters, Arabic labels, clean technical style. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"chair_white",category:"كرسي",          type:"white", typeLabel:"خلفية بيضاء", name:"Chair — White Studio", tags:"chair,studio,catalog", prompt:"Professional product photography of a chair. Pure white seamless background, front 3/4 view showing seat, back and legs, soft even studio lighting, no shadows, commercial quality, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"chair_env",  category:"كرسي",          type:"env",   typeLabel:"بيئة واقعية",  name:"Chair — Modern Interior", tags:"modern,interior,office", prompt:"Elegant modern living room or office, chair placed naturally on light floor, soft window lighting, minimal decor, no clutter, photorealistic, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"chair_dim",  category:"كرسي",          type:"dim",   typeLabel:"مقاسات",        name:"Chair — Dimensions", tags:"dimensions,seat,height", prompt:"Chair on pure white background, arrows showing seat height, total height, width and depth in centimeters, Arabic labels, clean technical annotation. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"bed_white",  category:"سرير",          type:"white", typeLabel:"خلفية بيضاء", name:"Bed — White Studio", tags:"bed,studio,white", prompt:"Professional product photography of a bed frame. Pure white seamless background, front 3/4 view showing headboard and frame clearly, soft studio lighting, clean commercial presentation, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"bed_env",    category:"سرير",          type:"env",   typeLabel:"بيئة واقعية",  name:"Bed — Luxury Bedroom", tags:"bedroom,luxury,styled", prompt:"Luxury master bedroom, bed styled with premium neutral bedding, soft natural morning light, minimal elegant nightstands, warm tones, no clutter, photorealistic, 8K. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
-  { id:"bed_dim",    category:"سرير",          type:"dim",   typeLabel:"مقاسات",        name:"Bed — Dimensions", tags:"dimensions,length,width", prompt:"Bed on pure white background, arrows showing total length, width, headboard height and bed height in centimeters, Arabic labels, technical annotation style. Keep the product exactly the same shape, color, material, structure, proportions, and design." },
+// ── Types ─────────────────────────────────────────────
+interface PromptItem { id:string; category:string; type:string; typeLabel:string; name:string; tags:string; prompt:string; }
+interface Dimensions { width_cm:number; depth_cm:number; height_cm:number; confidence?:string; notes?:string; }
+
+const INITIAL_PROMPT_LIBRARY: PromptItem[] = [
+  { id:"sofa_white", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", name:"Sofa — White Studio", tags:"studio,white", prompt:"Professional product photography of a sofa. Pure white seamless background, soft even studio lighting, no harsh shadows, centered, front 3/4 view, 8K. The product must remain exactly the same." },
+  { id:"sofa_env",   category:"كنبة / أريكة", type:"env",   typeLabel:"بيئة واقعية",  name:"Sofa — Luxury Living Room", tags:"luxury,living", prompt:"Luxury modern living room, sofa on light oak floor, soft natural light from large windows, minimal Scandinavian decor, 8K. The product must remain exactly the same." },
+  { id:"table_white",category:"طاولة",         type:"white", typeLabel:"خلفية بيضاء", name:"Table — White Studio", tags:"studio,white", prompt:"Professional product photography of a table. Pure white background, top-front 3/4 view, soft studio lighting, 8K. The product must remain exactly the same." },
+  { id:"table_env",  category:"طاولة",         type:"env",   typeLabel:"بيئة واقعية",  name:"Table — Modern Dining", tags:"dining,modern", prompt:"Modern dining room, table on marble floor, elegant minimal decor, soft warm lighting, 8K. The product must remain exactly the same." },
+  { id:"lamp_white", category:"إضاءة",         type:"white", typeLabel:"خلفية بيضاء", name:"Lamp — White Studio", tags:"lamp,studio", prompt:"Professional product photography of a lamp. Pure white background, lamp illuminated with warm glow, all design details visible, 8K. The product must remain exactly the same." },
+  { id:"lamp_env",   category:"إضاءة",         type:"env",   typeLabel:"بيئة واقعية",  name:"Lamp — Cozy Bedroom", tags:"bedroom,cozy", prompt:"Luxury bedroom corner, lamp on side table, warm ambient lighting, minimal elegant decor, 8K. The product must remain exactly the same." },
+  { id:"chair_white",category:"كرسي",          type:"white", typeLabel:"خلفية بيضاء", name:"Chair — White Studio", tags:"chair,studio", prompt:"Professional product photography of a chair. Pure white background, front 3/4 view, soft studio lighting, 8K. The product must remain exactly the same." },
+  { id:"chair_env",  category:"كرسي",          type:"env",   typeLabel:"بيئة واقعية",  name:"Chair — Modern Interior", tags:"modern,office", prompt:"Elegant modern living room, chair on light floor, soft window lighting, minimal decor, 8K. The product must remain exactly the same." },
+  { id:"bed_white",  category:"سرير",          type:"white", typeLabel:"خلفية بيضاء", name:"Bed — White Studio", tags:"bed,studio", prompt:"Professional product photography of a bed frame. Pure white background, 3/4 view showing headboard clearly, soft studio lighting, 8K. The product must remain exactly the same." },
+  { id:"bed_env",    category:"سرير",          type:"env",   typeLabel:"بيئة واقعية",  name:"Bed — Luxury Bedroom", tags:"bedroom,luxury", prompt:"Luxury master bedroom, bed with premium neutral bedding, soft natural morning light, 8K. The product must remain exactly the same." },
 ];
 
-const TAB_TO_TYPE: Record<string,string> = { white:"white", env:"env", dim:"dim" };
-
-const CAT_COLORS: Record<string,{bg:string,text:string}> = {
-  "كنبة / أريكة": {bg:"#EEEDFE", text:"#534AB7"},
-  "طاولة":        {bg:"#FAEEDA", text:"#854F0B"},
-  "إضاءة":        {bg:"#FAECE7", text:"#993C1D"},
-  "كرسي":         {bg:"#EAF3DE", text:"#3B6D11"},
-  "سرير":         {bg:"#E6F1FB", text:"#185FA5"},
-  "خزانة":        {bg:"#FBEAF0", text:"#993556"},
-  "ديكور":        {bg:"#F1EFE8", text:"#5F5E5A"},
-  "أخرى":         {bg:"#F1EFE8", text:"#5F5E5A"},
-};
-const TYPE_COLORS: Record<string,{bg:string,text:string}> = {
-  white: {bg:"#E6F1FB", text:"#185FA5"},
-  env:   {bg:"#E1F5EE", text:"#0F6E56"},
-  dim:   {bg:"#FAEEDA", text:"#854F0B"},
-};
-const TYPE_LABELS: Record<string,string> = { white:"خلفية بيضاء", env:"بيئة واقعية", dim:"مقاسات" };
-
 const ALL_CATEGORIES = ["كنبة / أريكة","طاولة","إضاءة","كرسي","سرير","خزانة","ديكور","أخرى"];
+const TYPE_LABELS: Record<string,string> = { white:"خلفية بيضاء", env:"بيئة واقعية", dim:"مقاسات" };
+const CAT_COLORS: Record<string,{bg:string;text:string}> = {
+  "كنبة / أريكة":{bg:"#EEEDFE",text:"#534AB7"},"طاولة":{bg:"#FAEEDA",text:"#854F0B"},
+  "إضاءة":{bg:"#FAECE7",text:"#993C1D"},"كرسي":{bg:"#EAF3DE",text:"#3B6D11"},
+  "سرير":{bg:"#E6F1FB",text:"#185FA5"},"خزانة":{bg:"#FBEAF0",text:"#993556"},
+  "ديكور":{bg:"#F1EFE8",text:"#5F5E5A"},"أخرى":{bg:"#F1EFE8",text:"#5F5E5A"},
+};
 
-// ══════════════════════════════════════════════════════════════
-// PROMPT LIBRARY VIEW — جدول + modal إضافة/تعديل
-// ══════════════════════════════════════════════════════════════
+// ── Helpers ───────────────────────────────────────────
+const iS: React.CSSProperties = { width:"100%", padding:"8px 10px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-primary)", fontSize:"12px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" as any };
 
-const ENV_STYLES = [
-      "Minimal Modern","Luxury Modern","Warm Cozy","Scandinavian",
-      "Hotel Style","Premium Arabic Interior","Outdoor Resort",
-      "Café Style","Office Style","Neutral Editorial"
-    ];
-const CATEGORIES = [
-      "كنبة / أريكة","طاولة","إضاءة","كرسي","سرير",
-      "طاولة جانبية","طاولة قهوة","طاولة طعام",
-      "خزانة / وحدة TV","أثاث خارجي","ديكور","أخرى"
-    ];
+const compressImage = (file: File): Promise<string> => new Promise(resolve => {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    const maxDim = 1920;
+    let w = img.width, h = img.height;
+    if (w > maxDim || h > maxDim) { if(w>h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
+    canvas.width=w; canvas.height=h;
+    canvas.getContext("2d")!.drawImage(img,0,0,w,h);
+    URL.revokeObjectURL(url);
+    const compress = (q:number) => {
+      const d = canvas.toDataURL("image/jpeg", q);
+      if (Math.round((d.length-22)*3/4) > 2*1024*1024 && q>0.3) compress(Math.max(q-0.08,0.3));
+      else resolve(d.split(",")[1]);
+    };
+    compress(0.92);
+  };
+  img.src = url;
+});
 
+// ═══════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════
 export default function ContentStudioView({ sidebarJSX }: { sidebarJSX: React.ReactNode }) {
+  const loadLib = (): PromptItem[] => { try { const s=localStorage.getItem("wesal_prompt_library"); return s?JSON.parse(s):INITIAL_PROMPT_LIBRARY; }catch{return INITIAL_PROMPT_LIBRARY;} };
 
-  const loadLib = () => { try { const s = localStorage.getItem("wesal_prompt_library"); return s ? JSON.parse(s) : INITIAL_PROMPT_LIBRARY; } catch { return INITIAL_PROMPT_LIBRARY; } };
-
+  // ── State ──────────────────────────────────────────
   const [imagePreview, setImagePreview] = useState<string|null>(null);
   const [imageBase64, setImageBase64]   = useState<string|null>(null);
   const [imageUrl, setImageUrl]         = useState("");
   const [category, setCategory]         = useState("كنبة / أريكة");
-  const [activeType, setActiveType]     = useState("white");
-  const [selectedPromptId, setSelectedPromptId] = useState("");
-  const [customPrompt, setCustomPrompt] = useState("");
-  const [genLoading, setGenLoading]     = useState(false);
-  const [genImages, setGenImages]       = useState<Record<string,string>>({});
-  const [history, setHistory]           = useState<any[]>([]);
-  const [historyModal, setHistoryModal] = useState<any>(null);
+  const [labelLang, setLabelLang]       = useState<"Arabic"|"English">("Arabic");
+
+  // Dimensions
+  const [dimW, setDimW] = useState("");
+  const [dimD, setDimD] = useState("");
+  const [dimH, setDimH] = useState("");
+  const [visionLoading, setVisionLoading] = useState(false);
+  const [visionResult, setVisionResult]   = useState<Dimensions|null>(null);
+
+  // Prompts
+  const [envPromptId, setEnvPromptId] = useState("");
+
+  // Results
+  const [whiteResult,  setWhiteResult]  = useState<string|null>(null);
+  const [envResult,    setEnvResult]    = useState<string|null>(null);
+  const [dimResult,    setDimResult]    = useState<string|null>(null);
+
+  // Loading states
+  const [loadingWhite, setLoadingWhite] = useState(false);
+  const [loadingEnv,   setLoadingEnv]   = useState(false);
+  const [loadingDim,   setLoadingDim]   = useState(false);
+
+  // History
+  const [history, setHistory] = useState<any[]>([]);
+  const [viewModal, setViewModal] = useState<any>(null);
+
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Prompts للفئة + النوع المحدد
-  const getPromptsForSelection = () => {
+  // Auto-select first env prompt when category changes
+  useEffect(() => {
     const lib = loadLib();
-    return lib.filter((p: any) => p.category === category && p.type === activeType);
-  };
+    const envPrompts = lib.filter(p => p.category === category && p.type === "env");
+    setEnvPromptId(envPrompts[0]?.id || "");
+  }, [category]);
 
-  const promptsForSelection = getPromptsForSelection();
+  const envPrompts = loadLib().filter(p => p.category === category && p.type === "env");
+  const selectedEnvPrompt = loadLib().find(p => p.id === envPromptId);
 
-  // تحديد أول prompt تلقائياً عند تغيير الفئة أو النوع
-  const prevCatType = useRef({ category, activeType });
-  if (prevCatType.current.category !== category || prevCatType.current.activeType !== activeType) {
-    prevCatType.current = { category, activeType };
-    const newPrompts = loadLib().filter((p: any) => p.category === category && p.type === activeType);
-    if (newPrompts.length > 0) setSelectedPromptId(newPrompts[0].id);
-    else setSelectedPromptId("");
-  }
-
-  const selectedPrompt = loadLib().find((p: any) => p.id === selectedPromptId);
-
-  // ضغط الصورة لـ 2MB
-  const compressImage = (file: File): Promise<string> => new Promise(resolve => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const maxDim = 1920;
-      let w = img.width, h = img.height;
-      if (w > maxDim || h > maxDim) { if (w > h) { h = Math.round(h*maxDim/w); w = maxDim; } else { w = Math.round(w*maxDim/h); h = maxDim; } }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      const compress = (q: number) => {
-        const d = canvas.toDataURL("image/jpeg", q);
-        if (Math.round((d.length-22)*3/4) > 2*1024*1024 && q > 0.3) compress(Math.max(q-0.08, 0.3));
-        else resolve(d.split(",")[1]);
-      };
-      compress(0.92);
-    };
-    img.src = url;
-  });
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── Image Upload ───────────────────────────────────
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => setImagePreview(ev.target?.result as string);
     reader.readAsDataURL(file);
     setImageBase64(await compressImage(file));
+    // Reset results
+    setWhiteResult(null); setEnvResult(null); setDimResult(null); setVisionResult(null);
   };
 
-  const AGENT_SYSTEM_PROMPT = `You are an AI Product Content Studio Agent specialized in processing e-commerce product images for furniture.
-Your role is to enhance and prepare product images for commercial use WITHOUT changing the product itself.
-
-CRITICAL RULE (NON-NEGOTIABLE):
-The product MUST remain exactly the same. Preserve: shape, color, material, proportions, structure, all parts.
-DO NOT: generate new product, redesign, change color/material, add/remove elements, alter proportions.
-Always use the original product pixels.
-
-IMAGE CLEANING (if needed):
-- remove unwanted text, stickers, watermarks, labels
-- remove background artifacts
-- fix noise or compression issues
-- remove color bleeding
-NOT allowed: removing real branding, removing design elements, blurring details.
-
-OUTPUT RULES:
-- WHITE BACKGROUND: pure white, soft shadow, clean lighting, centered, no props
-- LIFESTYLE: realistic environment, correct scale, minimal clutter, product is main focus
-- DIMENSION: arrows + labels, width/depth/height in cm only, DO NOT guess dimensions
-
-FINAL RULE: Output must look identical to original product. Only allowed: background, lighting, cleaning, annotations.`;
-
-  const generateImage = async () => {
-    if (!selectedPrompt) return alert("اختر Prompt من القائمة");
-    if (!imageBase64 && !imageUrl) return alert("ارفع صورة المنتج أولاً");
-    setGenLoading(true);
-    const removeText = "Remove any text, watermarks, logos, stickers or written characters from the original product image. Do NOT change the product itself. ";
-    const custom = customPrompt.trim() ? ` ${customPrompt.trim()}` : "";
-    const fullPrompt = `${AGENT_SYSTEM_PROMPT}\n\nSPECIFIC INSTRUCTION:\n${removeText}${selectedPrompt.prompt}${custom}`;
+  // ── Step 1: White Background ───────────────────────
+  const handleWhiteBg = async () => {
+    if (!imageBase64 && !imageUrl) return alert("ارفع صورة أولاً");
+    setLoadingWhite(true);
     try {
-      const res = await fetch(`${API_URL}/content-studio/generate-image`, {
+      const res = await fetch(`${API_URL}/content-studio/remove-background`, {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ prompt:fullPrompt, image_base64:imageBase64||"", image_url:imageUrl, mode:activeType, width:1024, height:1024 })
+        body: JSON.stringify({ image_base64: imageBase64||"", image_url: imageUrl })
       });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.detail||"خطأ"); }
+      if (!res.ok) throw new Error((await res.json()).detail||"خطأ");
       const data = await res.json();
-      const key = `${selectedPromptId}_${Date.now()}`;
-      setGenImages(p => ({ ...p, [activeType]: data.image_url }));
-      setHistory(h => [{ id:key, promptName:selectedPrompt.name, category, type:activeType, typeLabel:TYPE_LABELS[activeType], imageUrl:data.image_url, time:new Date().toLocaleTimeString("ar") }, ...h.slice(0,19)]);
-    } catch(e: any) { alert("خطأ: "+e.message); }
-    setGenLoading(false);
+      const dataUrl = `data:image/jpeg;base64,${data.image_base64}`;
+      setWhiteResult(dataUrl);
+      addHistory("خلفية بيضاء", dataUrl, data.method === "passthrough" ? "⚠ بدون إزالة خلفية (أضف CLIPDROP_API_KEY)" : "");
+    } catch(e:any) { alert("خطأ: "+e.message); }
+    setLoadingWhite(false);
   };
 
-  const iStyle: React.CSSProperties = { width:"100%", padding:"8px 10px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-primary)", fontSize:"12px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" as any };
-  const types = [{k:"white",l:"خلفية بيضاء"},{k:"env",l:"بيئة واقعية"},{k:"dim",l:"مقاسات"}];
+  // ── Step 2: Vision Dimensions ──────────────────────
+  const handleVisionDims = async () => {
+    if (!imageBase64 && !imageUrl) return alert("ارفع صورة أولاً");
+    setVisionLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/content-studio/vision-dimensions`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ image_base64: imageBase64||"", image_url: imageUrl, category })
+      });
+      const data = await res.json();
+      if (data.dimensions) {
+        setVisionResult(data.dimensions);
+        if (data.dimensions.width_cm)  setDimW(String(data.dimensions.width_cm));
+        if (data.dimensions.depth_cm)  setDimD(String(data.dimensions.depth_cm));
+        if (data.dimensions.height_cm) setDimH(String(data.dimensions.height_cm));
+      }
+    } catch(e:any) { alert("خطأ: "+e.message); }
+    setVisionLoading(false);
+  };
+
+  // ── Step 3: Draw Dimensions ────────────────────────
+  const handleDrawDims = async () => {
+    if (!whiteResult && !imageBase64 && !imageUrl) return alert("ابدأ بالخلفية البيضاء أولاً");
+    if (!dimW && !dimH && !dimD) return alert("أدخل مقساً واحداً على الأقل");
+    setLoadingDim(true);
+    try {
+      // استخدم الخلفية البيضاء إذا متوفرة
+      let base64ToUse = imageBase64||"";
+      if (whiteResult && whiteResult.startsWith("data:")) {
+        base64ToUse = whiteResult.split(",")[1];
+      }
+      const res = await fetch(`${API_URL}/content-studio/draw-dimensions`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          image_base64: base64ToUse,
+          width_cm:  parseFloat(dimW)||0,
+          depth_cm:  parseFloat(dimD)||0,
+          height_cm: parseFloat(dimH)||0,
+          label_lang: labelLang,
+        })
+      });
+      if (!res.ok) throw new Error((await res.json()).detail||"خطأ");
+      const data = await res.json();
+      const dataUrl = `data:image/jpeg;base64,${data.image_base64}`;
+      setDimResult(dataUrl);
+      addHistory("مقاسات", dataUrl, "");
+    } catch(e:any) { alert("خطأ: "+e.message); }
+    setLoadingDim(false);
+  };
+
+  // ── Step 4: Generate Environment ──────────────────
+  const handleGenEnv = async () => {
+    if (!imageBase64 && !imageUrl) return alert("ارفع صورة أولاً");
+    if (!selectedEnvPrompt) return alert("اختر بيئة من القائمة");
+    setLoadingEnv(true);
+    try {
+      const res = await fetch(`${API_URL}/content-studio/generate-env`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          image_base64: imageBase64||"",
+          image_url: imageUrl,
+          prompt: selectedEnvPrompt.prompt,
+          width: 1024, height: 1024,
+        })
+      });
+      if (!res.ok) throw new Error((await res.json()).detail||"خطأ");
+      const data = await res.json();
+      setEnvResult(data.image_url);
+      addHistory(selectedEnvPrompt.name, data.image_url, "");
+    } catch(e:any) { alert("خطأ: "+e.message); }
+    setLoadingEnv(false);
+  };
+
+  const addHistory = (name: string, url: string, note: string) => {
+    setHistory(h => [{ name, url, note, time: new Date().toLocaleTimeString("ar") }, ...h.slice(0,19)]);
+  };
+
+  // ── UI ─────────────────────────────────────────────
+  const Spinner = () => (
+    <div style={{width:18,height:18,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.7s linear infinite",display:"inline-block",verticalAlign:"middle",marginLeft:6}}/>
+  );
+
+  const ResultCard = ({title,img,loading,onAction,actionLabel,warning}:{title:string;img:string|null;loading:boolean;onAction:()=>void;actionLabel:string;warning?:string}) => (
+    <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:"12px",overflow:"hidden"}}>
+      <div style={{height:200,background:"var(--color-background-secondary)",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden"}}>
+        {img ? (
+          <>
+            <img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"contain",cursor:"pointer"}} onClick={()=>setViewModal({name:title,url:img})}/>
+            <div style={{position:"absolute",top:6,right:6,background:"#1D9E75",color:"#fff",fontSize:"9px",padding:"2px 7px",borderRadius:"10px"}}>مكتمل ✓</div>
+          </>
+        ) : loading ? (
+          <div style={{textAlign:"center"}}>
+            <div style={{width:28,height:28,border:"2px solid var(--color-border-secondary)",borderTopColor:"#534AB7",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
+            <p style={{fontSize:"11px",color:"var(--color-text-tertiary)",margin:0}}>جاري المعالجة...</p>
+          </div>
+        ) : (
+          <div style={{textAlign:"center",opacity:0.4}}>
+            <p style={{fontSize:"28px",margin:"0 0 6px"}}>🖼</p>
+            <p style={{fontSize:"10px",color:"var(--color-text-tertiary)",margin:0}}>لم يُعالج بعد</p>
+          </div>
+        )}
+      </div>
+      <div style={{padding:"10px 12px"}}>
+        <p style={{fontSize:"12px",fontWeight:"600",color:"var(--color-text-primary)",margin:"0 0 6px"}}>{title}</p>
+        {warning && <p style={{fontSize:"10px",color:"#EF9F27",margin:"0 0 6px"}}>{warning}</p>}
+        <div style={{display:"flex",gap:"6px"}}>
+          <button onClick={onAction} disabled={loading}
+            style={{flex:1,padding:"7px",background:loading?"var(--color-background-secondary)":"#534AB7",border:"none",borderRadius:"7px",color:loading?"var(--color-text-tertiary)":"#EEEDFE",fontSize:"11px",fontWeight:"600",cursor:loading?"not-allowed":"pointer",fontFamily:"inherit"}}>
+            {loading ? <><Spinner/> جاري...</> : actionLabel}
+          </button>
+          {img && (
+            <a href={img} download={`${title}.jpg`} target="_blank" rel="noopener noreferrer"
+              style={{padding:"7px 10px",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:"7px",color:"var(--color-text-secondary)",fontSize:"11px",textDecoration:"none",display:"flex",alignItems:"center"}}>
+              ⬇
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"var(--color-background-tertiary)", color:"var(--color-text-primary)" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+    <div style={{fontFamily:"'Tajawal',sans-serif",direction:"rtl",minHeight:"100vh",background:"var(--color-background-tertiary)",color:"var(--color-text-primary)"}}>
+      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet"/>
       <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
-      <div style={{ display:"flex", minHeight:"100vh" }}>
+      <div style={{display:"flex",minHeight:"100vh"}}>
         {sidebarJSX}
-        <div style={{ flex:1, display:"grid", gridTemplateColumns:"250px 1fr", overflow:"hidden" }}>
+        <div style={{flex:1,display:"grid",gridTemplateColumns:"260px 1fr",overflow:"hidden"}}>
 
-          {/* Left Panel */}
-          <div style={{ background:"var(--color-background-secondary)", borderLeft:"0.5px solid var(--color-border-tertiary)", padding:"18px", overflowY:"auto", display:"flex", flexDirection:"column", gap:"12px" }}>
+          {/* ── Left Panel ─────────────────────────── */}
+          <div style={{background:"var(--color-background-secondary)",borderLeft:"0.5px solid var(--color-border-tertiary)",padding:"18px",overflowY:"auto",display:"flex",flexDirection:"column",gap:"14px"}}>
+
             <div>
-              <h2 style={{ fontSize:"15px", fontWeight:"700", margin:"0 0 3px" }}>✨ Content Studio</h2>
-              <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>توليد صور من مكتبة الـ Prompts</p>
+              <h2 style={{fontSize:"15px",fontWeight:"700",margin:"0 0 3px"}}>✨ Content Studio</h2>
+              <p style={{fontSize:"11px",color:"var(--color-text-tertiary)",margin:0}}>معالجة احترافية لصور المنتجات</p>
             </div>
 
             {/* Image Upload */}
             <div>
-              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>صورة المنتج</p>
+              <p style={{fontSize:"11px",color:"var(--color-text-secondary)",margin:"0 0 5px",fontWeight:"600"}}>صورة المنتج</p>
               {imagePreview ? (
-                <div style={{ position:"relative" }}>
-                  <img src={imagePreview} alt="" style={{ width:"100%", height:"130px", objectFit:"contain", background:"var(--color-background-primary)", borderRadius:"8px", border:"0.5px solid var(--color-border-tertiary)" }} />
-                  <button onClick={() => { setImagePreview(null); setImageBase64(null); }} style={{ position:"absolute", top:5, left:5, width:20, height:20, background:"#fdeaea", border:"0.5px solid #f8d0d0", borderRadius:"50%", color:"#e24b4a", cursor:"pointer", fontSize:"10px", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-                  <div style={{ position:"absolute", bottom:5, right:5, background:"rgba(0,0,0,0.5)", borderRadius:"4px", padding:"1px 5px" }}>
-                    <span style={{ fontSize:"9px", color:"#fff" }}>✅ 2MB</span>
-                  </div>
+                <div style={{position:"relative"}}>
+                  <img src={imagePreview} alt="" style={{width:"100%",height:"140px",objectFit:"contain",background:"var(--color-background-primary)",borderRadius:"9px",border:"0.5px solid var(--color-border-tertiary)"}}/>
+                  <button onClick={()=>{setImagePreview(null);setImageBase64(null);setWhiteResult(null);setEnvResult(null);setDimResult(null);}} style={{position:"absolute",top:5,left:5,width:20,height:20,background:"#fdeaea",border:"0.5px solid #f8d0d0",borderRadius:"50%",color:"#e24b4a",cursor:"pointer",fontSize:"10px"}}>✕</button>
+                  <div style={{position:"absolute",bottom:5,right:5,background:"rgba(0,0,0,0.5)",borderRadius:"4px",padding:"1px 5px"}}><span style={{fontSize:"9px",color:"#fff"}}>✅ 2MB</span></div>
                 </div>
               ) : (
-                <div onClick={() => fileRef.current?.click()} style={{ border:"1.5px dashed var(--color-border-secondary)", borderRadius:"8px", padding:"20px", textAlign:"center", cursor:"pointer", background:"var(--color-background-primary)" }}>
-                  <input ref={fileRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display:"none" }} />
-                  <div style={{ fontSize:"22px", marginBottom:"4px" }}>📷</div>
-                  <div style={{ fontSize:"11px", color:"var(--color-text-secondary)" }}>ارفع صورة المنتج</div>
-                  <div style={{ fontSize:"9px", color:"var(--color-text-tertiary)", marginTop:"3px" }}>يُضغط لـ 2MB + تُحذف النصوص</div>
+                <div onClick={()=>fileRef.current?.click()} style={{border:"1.5px dashed var(--color-border-secondary)",borderRadius:"9px",padding:"22px",textAlign:"center",cursor:"pointer",background:"var(--color-background-primary)"}}>
+                  <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{display:"none"}}/>
+                  <div style={{fontSize:"24px",marginBottom:"5px"}}>📷</div>
+                  <div style={{fontSize:"11px",color:"var(--color-text-secondary)"}}>ارفع صورة المنتج</div>
+                  <div style={{fontSize:"9px",color:"var(--color-text-tertiary)",marginTop:"3px"}}>PNG/JPG — يُضغط لـ 2MB</div>
                 </div>
               )}
-            </div>
-
-            {/* URL */}
-            <div>
-              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 4px", fontWeight:"500" }}>أو رابط الصورة</p>
-              <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." style={{ ...iStyle, direction:"ltr", textAlign:"left" }} />
+              <div style={{marginTop:"8px"}}>
+                <p style={{fontSize:"11px",color:"var(--color-text-secondary)",margin:"0 0 4px",fontWeight:"500"}}>أو رابط الصورة</p>
+                <input value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://..." style={{...iS,direction:"ltr",textAlign:"left"}}/>
+              </div>
             </div>
 
             {/* Category */}
             <div>
-              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 4px", fontWeight:"500" }}>فئة المنتج</p>
-              <select value={category} onChange={e => setCategory(e.target.value)} style={iStyle}>
-                {CATEGORIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
+              <p style={{fontSize:"11px",color:"var(--color-text-secondary)",margin:"0 0 4px",fontWeight:"600"}}>فئة المنتج</p>
+              <select value={category} onChange={e=>setCategory(e.target.value)} style={iS}>
+                {ALL_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
-            {/* Output Type */}
-            <div>
-              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>نوع المخرج</p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"4px" }}>
-                {types.map(t => (
-                  <button key={t.k} onClick={() => setActiveType(t.k)}
-                    style={{ padding:"6px 4px", fontSize:"10px", background:activeType===t.k?"#534AB7":"var(--color-background-primary)", border:`0.5px solid ${activeType===t.k?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"7px", color:activeType===t.k?"#EEEDFE":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit" }}>
-                    {t.k==="white"?"⬜":t.k==="env"?"🏠":"📐"} {t.l}
-                  </button>
+            {/* Dimensions */}
+            <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:"10px",padding:"12px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+                <p style={{fontSize:"11px",color:"var(--color-text-secondary)",margin:0,fontWeight:"600"}}>📐 المقاسات (سم)</p>
+                <button onClick={handleVisionDims} disabled={visionLoading||(!imageBase64&&!imageUrl)}
+                  style={{padding:"4px 10px",background:visionLoading||(!imageBase64&&!imageUrl)?"var(--color-background-secondary)":"#EEEDFE",border:`0.5px solid ${visionLoading?"var(--color-border-secondary)":"#534AB7"}`,borderRadius:"6px",color:visionLoading?"var(--color-text-tertiary)":"#534AB7",fontSize:"10px",cursor:visionLoading||(!imageBase64&&!imageUrl)?"not-allowed":"pointer",fontFamily:"inherit",fontWeight:"600"}}>
+                  {visionLoading?"جاري...":"🤖 خمّن بـ AI"}
+                </button>
+              </div>
+              {visionResult && (
+                <div style={{background:"#EEEDFE",borderRadius:"6px",padding:"6px 8px",marginBottom:"8px",fontSize:"10px",color:"#534AB7"}}>
+                  AI: عرض {visionResult.width_cm}، عمق {visionResult.depth_cm}، ارتفاع {visionResult.height_cm} سم
+                  {visionResult.confidence && <span style={{marginRight:"4px",opacity:0.7}}>({visionResult.confidence==="high"?"دقة عالية":visionResult.confidence==="medium"?"متوسطة":"منخفضة"})</span>}
+                </div>
+              )}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px"}}>
+                {([["العرض",dimW,setDimW],["العمق",dimD,setDimD],["الارتفاع",dimH,setDimH]] as [string,string,any][]).map(([l,v,s])=>(
+                  <div key={l}>
+                    <p style={{fontSize:"9px",color:"var(--color-text-tertiary)",margin:"0 0 3px"}}>{l}</p>
+                    <input value={v} onChange={e=>s(e.target.value)} placeholder="0" style={{...iS,padding:"6px 7px",fontSize:"12px"}}/>
+                  </div>
                 ))}
+              </div>
+              <div style={{marginTop:"8px"}}>
+                <p style={{fontSize:"10px",color:"var(--color-text-secondary)",margin:"0 0 4px"}}>لغة المقاسات</p>
+                <div style={{display:"flex",gap:"5px"}}>
+                  {(["Arabic","English"] as const).map(l=>(
+                    <button key={l} onClick={()=>setLabelLang(l)}
+                      style={{flex:1,padding:"5px",background:labelLang===l?"#534AB7":"var(--color-background-secondary)",border:`0.5px solid ${labelLang===l?"#534AB7":"var(--color-border-secondary)"}`,borderRadius:"6px",color:labelLang===l?"#EEEDFE":"var(--color-text-secondary)",fontSize:"10px",cursor:"pointer",fontFamily:"inherit"}}>
+                      {l==="Arabic"?"عربي":"English"}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Prompt Dropdown */}
-            <div>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"4px" }}>
-                <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0, fontWeight:"500" }}>اختر Prompt</p>
-                <span style={{ fontSize:"9px", color:promptsForSelection.length > 0 ? "var(--color-text-success)" : "#E24B4A" }}>
-                  {promptsForSelection.length > 0 ? `${promptsForSelection.length} متاح` : "لا يوجد"}
-                </span>
-              </div>
-              {promptsForSelection.length > 0 ? (
-                <select value={selectedPromptId} onChange={e => setSelectedPromptId(e.target.value)} style={iStyle}>
-                  {promptsForSelection.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {/* Environment Prompt */}
+            <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:"10px",padding:"12px"}}>
+              <p style={{fontSize:"11px",color:"var(--color-text-secondary)",margin:"0 0 6px",fontWeight:"600"}}>🏠 البيئة الواقعية</p>
+              {envPrompts.length > 0 ? (
+                <select value={envPromptId} onChange={e=>setEnvPromptId(e.target.value)} style={iS}>
+                  {envPrompts.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               ) : (
-                <div style={{ padding:"8px 10px", background:"#FCEBEB", border:"0.5px solid #F7C1C1", borderRadius:"8px", fontSize:"11px", color:"#A32D2D" }}>
-                  لا يوجد Prompt — أضفه في مكتبة الأوامر
-                </div>
+                <div style={{padding:"7px 10px",background:"#FCEBEB",borderRadius:"7px",fontSize:"10px",color:"#A32D2D"}}>لا يوجد prompt — أضفه في مكتبة الأوامر</div>
+              )}
+              {selectedEnvPrompt && (
+                <p style={{fontSize:"9px",color:"var(--color-text-tertiary)",margin:"5px 0 0",direction:"ltr",textAlign:"left",lineHeight:"1.4",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{selectedEnvPrompt.prompt}</p>
               )}
             </div>
 
-            {/* Custom */}
-            <div style={{ background:"#fffbf0", border:"0.5px solid #f0e0b0", borderRadius:"8px", padding:"8px 10px" }}>
-              <p style={{ fontSize:"11px", color:"#a07010", margin:"0 0 4px", fontWeight:"600" }}>⚡ إضافة مخصصة</p>
-              <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} rows={2} placeholder="ultra realistic, 8K..." style={{ ...iStyle, resize:"none", fontSize:"11px", direction:"ltr", textAlign:"left" }} />
-            </div>
-
-            {/* Generate Button */}
-            <button onClick={generateImage} disabled={genLoading || !selectedPromptId || (!imageBase64 && !imageUrl)}
-              style={{ width:"100%", padding:"10px", background:genLoading||!selectedPromptId?"#e0e0f0":"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"9px", color:genLoading||!selectedPromptId?"#9090c0":"#fff", fontSize:"13px", fontWeight:"700", cursor:genLoading||!selectedPromptId?"not-allowed":"pointer", fontFamily:"inherit" }}>
-              {genLoading ? "⏳ جاري التوليد..." : "🎨 ولّد الصورة"}
-            </button>
           </div>
 
-          {/* Right: Output Area */}
-          <div style={{ padding:"20px", overflowY:"auto", background:"var(--color-background-tertiary)", display:"flex", flexDirection:"column", gap:"20px" }}>
+          {/* ── Right Panel ────────────────────────── */}
+          <div style={{padding:"20px",overflowY:"auto",display:"flex",flexDirection:"column",gap:"20px"}}>
 
-            {/* Output Cards */}
+            {/* Pipeline Steps */}
             <div>
-              <p style={{ fontSize:"13px", fontWeight:"600", color:"var(--color-text-primary)", margin:"0 0 12px" }}>المخرجات</p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
-                {types.map(t => (
-                  <div key={t.k} style={{ background:"var(--color-background-primary)", border:`0.5px solid ${activeType===t.k && genLoading?"#7c3aed":"var(--color-border-tertiary)"}`, borderRadius:"12px", overflow:"hidden", cursor: genImages[t.k] ? "pointer" : "default" }} onClick={() => genImages[t.k] && setHistoryModal({ promptName:t.l, imageUrl:genImages[t.k] })}>
-                    <div style={{ height:"150px", background:"var(--color-background-secondary)", display:"flex", alignItems:"center", justifyContent:"center", position:"relative", overflow:"hidden" }}>
-                      {genImages[t.k] ? (
-                        <>
-                          <img src={genImages[t.k]} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-                          <div style={{ position:"absolute", top:6, right:6, background:"#1D9E75", color:"#fff", fontSize:"9px", padding:"2px 7px", borderRadius:"10px" }}>مكتمل</div>
-                        </>
-                      ) : activeType===t.k && genLoading ? (
-                        <div style={{ textAlign:"center" }}>
-                          <div style={{ width:24, height:24, border:"2px solid var(--color-border-secondary)", borderTopColor:"#7c3aed", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 6px" }} />
-                          <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>جاري التوليد...</p>
-                        </div>
-                      ) : (
-                        <div style={{ textAlign:"center", opacity:0.4 }}>
-                          <div style={{ fontSize:"24px", marginBottom:"4px" }}>{t.k==="white"?"⬜":t.k==="env"?"🏠":"📐"}</div>
-                          <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>لم يُولَّد بعد</p>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ padding:"8px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                      <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0 }}>{t.l}</p>
-                      {genImages[t.k] && (
-                        <a href={genImages[t.k]} download={`${t.k}_generated.jpg`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                          style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", color:"var(--color-text-secondary)", textDecoration:"none" }}>
-                          ⬇ تنزيل
-                        </a>
-                      )}
-                    </div>
+              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"14px"}}>
+                <p style={{fontSize:"14px",fontWeight:"600",color:"var(--color-text-primary)",margin:0}}>Pipeline المعالجة</p>
+                <span style={{fontSize:"10px",color:"var(--color-text-tertiary)",background:"var(--color-background-secondary)",padding:"2px 8px",borderRadius:"10px"}}>3 خطوات</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px"}}>
+
+                {/* White BG */}
+                <ResultCard
+                  title="⬜ خلفية بيضاء"
+                  img={whiteResult}
+                  loading={loadingWhite}
+                  onAction={handleWhiteBg}
+                  actionLabel="إزالة الخلفية"
+                />
+
+                {/* Environment */}
+                <ResultCard
+                  title="🏠 بيئة واقعية"
+                  img={envResult}
+                  loading={loadingEnv}
+                  onAction={handleGenEnv}
+                  actionLabel="توليد البيئة"
+                />
+
+                {/* Dimensions */}
+                <ResultCard
+                  title="📐 مقاسات"
+                  img={dimResult}
+                  loading={loadingDim}
+                  onAction={handleDrawDims}
+                  actionLabel="رسم المقاسات"
+                />
+
+              </div>
+            </div>
+
+            {/* Pipeline Guide */}
+            <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:"10px",padding:"14px 16px"}}>
+              <p style={{fontSize:"12px",fontWeight:"600",color:"var(--color-text-primary)",margin:"0 0 10px"}}>دليل الاستخدام</p>
+              <div style={{display:"flex",gap:"0",position:"relative"}}>
+                <div style={{position:"absolute",top:14,right:22,left:22,height:"1px",background:"var(--color-border-tertiary)"}}/>
+                {[
+                  {n:"1",t:"ارفع الصورة",d:"PNG/JPG حتى 2MB"},
+                  {n:"2",t:"أدخل المقاسات",d:"يدوياً أو بـ AI"},
+                  {n:"3",t:"اختر البيئة",d:"من مكتبة الأوامر"},
+                  {n:"4",t:"ولّد المخرجات",d:"3 صور جاهزة"},
+                ].map((s,i)=>(
+                  <div key={i} style={{flex:1,textAlign:"center",position:"relative",zIndex:1}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:"#534AB7",color:"#EEEDFE",fontSize:"12px",fontWeight:"700",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 6px"}}>{s.n}</div>
+                    <p style={{fontSize:"11px",fontWeight:"600",color:"var(--color-text-primary)",margin:"0 0 2px"}}>{s.t}</p>
+                    <p style={{fontSize:"10px",color:"var(--color-text-tertiary)",margin:0}}>{s.d}</p>
                   </div>
                 ))}
               </div>
@@ -310,19 +418,18 @@ FINAL RULE: Output must look identical to original product. Only allowed: backgr
             {/* History */}
             {history.length > 0 && (
               <div>
-                <p style={{ fontSize:"13px", fontWeight:"600", color:"var(--color-text-primary)", margin:"0 0 10px" }}>آخر المخرجات</p>
-                <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
-                  {history.slice(0,8).map(h => (
-                    <div key={h.id} style={{ background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:"9px", padding:"8px 12px", display:"flex", alignItems:"center", gap:"10px", cursor:"pointer" }} onClick={() => setHistoryModal(h)}>
-                      <img src={h.imageUrl} alt="" style={{ width:42, height:42, borderRadius:"6px", objectFit:"cover", border:"0.5px solid var(--color-border-tertiary)", flexShrink:0 }} />
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <p style={{ fontSize:"12px", fontWeight:"500", color:"var(--color-text-primary)", margin:"0 0 2px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.promptName}</p>
-                        <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>{h.category} — {h.typeLabel} — {h.time}</p>
+                <p style={{fontSize:"13px",fontWeight:"600",color:"var(--color-text-primary)",margin:"0 0 10px"}}>آخر المخرجات</p>
+                <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                  {history.slice(0,8).map((h,i)=>(
+                    <div key={i} style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:"9px",padding:"8px 12px",display:"flex",alignItems:"center",gap:"10px",cursor:"pointer"}} onClick={()=>setViewModal(h)}>
+                      <img src={h.url} alt="" style={{width:42,height:42,borderRadius:"6px",objectFit:"cover",border:"0.5px solid var(--color-border-tertiary)",flexShrink:0}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <p style={{fontSize:"12px",fontWeight:"500",color:"var(--color-text-primary)",margin:"0 0 1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}</p>
+                        <p style={{fontSize:"10px",color:"var(--color-text-tertiary)",margin:0}}>{h.time}{h.note?` — ${h.note}`:""}</p>
                       </div>
-                      <div style={{ display:"flex", gap:"5px", flexShrink:0 }}>
-                        <a href={h.imageUrl} download={`generated_${h.id}.jpg`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                          style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", color:"var(--color-text-secondary)", textDecoration:"none" }}>⬇</a>
-                        <button onClick={e => { e.stopPropagation(); setHistoryModal(h); }} style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", cursor:"pointer", color:"var(--color-text-secondary)", fontFamily:"inherit" }}>عرض</button>
+                      <div style={{display:"flex",gap:"5px",flexShrink:0}}>
+                        <a href={h.url} download={`${h.name}.jpg`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+                          style={{fontSize:"10px",padding:"3px 8px",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:"5px",color:"var(--color-text-secondary)",textDecoration:"none"}}>⬇</a>
                       </div>
                     </div>
                   ))}
@@ -330,34 +437,26 @@ FINAL RULE: Output must look identical to original product. Only allowed: backgr
               </div>
             )}
 
-            {!imageBase64 && !imageUrl && history.length === 0 && (
-              <div style={{ textAlign:"center", padding:"60px 0", color:"var(--color-text-tertiary)" }}>
-                <div style={{ fontSize:"44px", marginBottom:"12px", opacity:0.3 }}>🎨</div>
-                <p style={{ fontSize:"13px", margin:"0 0 4px" }}>ارفع صورة المنتج واختر الـ Prompt</p>
-                <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>يُحذف النص تلقائياً ويُولَّد من مكتبة الأوامر</p>
-              </div>
-            )}
           </div>
         </div>
       </div>
 
-      {/* Image View Modal */}
-      {historyModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }} onClick={() => setHistoryModal(null)}>
-          <div style={{ background:"var(--color-background-primary)", borderRadius:"12px", padding:"16px", maxWidth:"600px", width:"90%", position:"relative" }} onClick={e => e.stopPropagation()}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
-              <p style={{ fontSize:"13px", fontWeight:"600", color:"var(--color-text-primary)", margin:0 }}>{historyModal.promptName}</p>
-              <div style={{ display:"flex", gap:"6px" }}>
-                <a href={historyModal.imageUrl} download="generated.jpg" target="_blank" rel="noopener noreferrer"
-                  style={{ padding:"5px 12px", background:"#534AB7", color:"#EEEDFE", borderRadius:"7px", fontSize:"11px", textDecoration:"none" }}>⬇ تنزيل</a>
-                <button onClick={() => setHistoryModal(null)} style={{ width:26, height:26, background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"50%", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:"12px", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+      {/* View Modal */}
+      {viewModal && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={()=>setViewModal(null)}>
+          <div style={{background:"var(--color-background-primary)",borderRadius:"12px",padding:"16px",maxWidth:"680px",width:"90%"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+              <p style={{fontSize:"13px",fontWeight:"600",color:"var(--color-text-primary)",margin:0}}>{viewModal.name}</p>
+              <div style={{display:"flex",gap:"6px"}}>
+                <a href={viewModal.url} download={`${viewModal.name}.jpg`} target="_blank" rel="noopener noreferrer"
+                  style={{padding:"5px 12px",background:"#534AB7",color:"#EEEDFE",borderRadius:"7px",fontSize:"11px",textDecoration:"none"}}>⬇ تنزيل</a>
+                <button onClick={()=>setViewModal(null)} style={{width:26,height:26,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:"50%",cursor:"pointer",color:"var(--color-text-secondary)",fontSize:"12px"}}>✕</button>
               </div>
             </div>
-            <img src={historyModal.imageUrl} alt="" style={{ width:"100%", borderRadius:"8px", border:"0.5px solid var(--color-border-tertiary)" }} />
+            <img src={viewModal.url} alt="" style={{width:"100%",borderRadius:"8px",border:"0.5px solid var(--color-border-tertiary)"}}/>
           </div>
         </div>
       )}
     </div>
   );
-
 }

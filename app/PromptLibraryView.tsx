@@ -284,8 +284,3 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
     </div>
   );
 }
-
-// ══════════════════════════════════════════════════════════════
-// CONTENT STUDIO VIEW — Dropdown + Output Grid + History
-// ══════════════════════════════════════════════════════════════
-}

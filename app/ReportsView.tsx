@@ -297,9 +297,3 @@ export default function ReportsView({
 
 
   // COMPETITORS VIEW
-  // ══════════════════════════════════════
-  // COMPETITORS VIEW — محدّث بالكامل
-  // ══════════════════════════════════════
-  // ══════════════════════════════════════
-  // COMPETITORS VIEW v2 — مواقع + منتجات
-}

@@ -125,13 +125,35 @@ export default function ContentStudioView({ sidebarJSX }: { sidebarJSX: React.Re
     setImageBase64(await compressImage(file));
   };
 
+  const AGENT_SYSTEM_PROMPT = `You are an AI Product Content Studio Agent specialized in processing e-commerce product images for furniture.
+Your role is to enhance and prepare product images for commercial use WITHOUT changing the product itself.
+
+CRITICAL RULE (NON-NEGOTIABLE):
+The product MUST remain exactly the same. Preserve: shape, color, material, proportions, structure, all parts.
+DO NOT: generate new product, redesign, change color/material, add/remove elements, alter proportions.
+Always use the original product pixels.
+
+IMAGE CLEANING (if needed):
+- remove unwanted text, stickers, watermarks, labels
+- remove background artifacts
+- fix noise or compression issues
+- remove color bleeding
+NOT allowed: removing real branding, removing design elements, blurring details.
+
+OUTPUT RULES:
+- WHITE BACKGROUND: pure white, soft shadow, clean lighting, centered, no props
+- LIFESTYLE: realistic environment, correct scale, minimal clutter, product is main focus
+- DIMENSION: arrows + labels, width/depth/height in cm only, DO NOT guess dimensions
+
+FINAL RULE: Output must look identical to original product. Only allowed: background, lighting, cleaning, annotations.`;
+
   const generateImage = async () => {
     if (!selectedPrompt) return alert("اختر Prompt من القائمة");
     if (!imageBase64 && !imageUrl) return alert("ارفع صورة المنتج أولاً");
     setGenLoading(true);
-    const removeText = "Remove any text, watermarks, logos, stickers or written characters from the original product image. ";
+    const removeText = "Remove any text, watermarks, logos, stickers or written characters from the original product image. Do NOT change the product itself. ";
     const custom = customPrompt.trim() ? ` ${customPrompt.trim()}` : "";
-    const fullPrompt = `${removeText}${selectedPrompt.prompt}${custom}`;
+    const fullPrompt = `${AGENT_SYSTEM_PROMPT}\n\nSPECIFIC INSTRUCTION:\n${removeText}${selectedPrompt.prompt}${custom}`;
     try {
       const res = await fetch(`${API_URL}/content-studio/generate-image`, {
         method:"POST", headers:{"Content-Type":"application/json"},

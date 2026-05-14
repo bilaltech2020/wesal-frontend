@@ -1,6 +1,13 @@
 // @ts-nocheck
 "use client";
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
+
+// ── Lazy load heavy views ─────────────────────────────
+const ReportsView       = dynamic(() => import("./components/ReportsView"),       { ssr: false });
+const ContentStudioView = dynamic(() => import("./components/ContentStudioView"), { ssr: false });
+const PromptLibraryView  = dynamic(() => import("./components/PromptLibraryView"),  { ssr: false });
+const AIProductImport   = dynamic(() => import("./components/AIProductImport"),    { ssr: false });
 
 function loadXLSX(): Promise<void> {
   return new Promise((resolve) => {
@@ -28,17 +35,33 @@ interface InventorySearch { id: string; sku: string; results: InventoryResult[];
 interface CompRow { id: string; sku: string; query: string; status: "idle"|"searching"|"done"|"error"; results: CompResult[]; }
 interface CompResult { competitor: string; title: string|null; price: number|null; currency: string; link: string|null; available: boolean|null; error: string|null; }
 
-type ViewType = "landing" | "login" | "register" | "dashboard" | "competitors" | "inventory" | "reports" | "content" | "library";
+type ViewType = "login" | "dashboard" | "competitors" | "inventory" | "reports" | "content" | "library" | "users" | "ai-import";
 
+// ── Roles & Permissions ──────────────────────────────
+type UserRole = "admin"|"manager"|"operations"|"sales"|"viewer";
+interface WesalUser{id:string;name:string;email:string;role:UserRole;createdAt:string;active:boolean;}
+const ROLE_LABELS:Record<UserRole,string>={admin:"مدير النظام",manager:"مدير",operations:"عمليات",sales:"مبيعات",viewer:"مشاهدة فقط"};
+const ROLE_PERMISSIONS:Record<UserRole,string[]>={
+  admin:["dashboard","reports","competitors","inventory","content","library","users","ai-import"],
+  manager:["dashboard","reports","competitors","inventory","content","library","ai-import"],
+  operations:["dashboard","reports","inventory"],
+  sales:["dashboard","competitors"],
+  viewer:["dashboard"],
+};
+const ROLE_COLORS:Record<UserRole,{bg:string;text:string}>={
+  admin:{bg:"#EEEDFE",text:"#534AB7"},manager:{bg:"#E1F5EE",text:"#0F6E56"},
+  operations:{bg:"#E6F1FB",text:"#185FA5"},sales:{bg:"#FAEEDA",text:"#854F0B"},
+  viewer:{bg:"#F1EFE8",text:"#5F5E5A"},
+};
 const NAV = [
-  { icon: "⬡", label: "لوحة التحكم", v: "dashboard" },
-  { icon: "🔍", label: "مراقبة المنافسين", v: "competitors" },
-  { icon: "📦", label: "مراقبة المخزون", v: "inventory" },
-  { icon: "◈", label: "التكاملات", v: "dashboard" },
-  { icon: "◇", label: "التقارير", v: "reports" },
-  { icon: "○", label: "الإعدادات", v: "dashboard" },
-  { icon: "✨", label: "Content Studio", v: "content" },
-  { icon: "📚", label: "مكتبة الأوامر", v: "library" },
+  {icon:"⬡",  label:"لوحة التحكم",    v:"dashboard",   perm:"dashboard"},
+  {icon:"📊", label:"التقارير",         v:"reports",     perm:"reports"},
+  {icon:"🔍", label:"مراقبة المنافسين", v:"competitors", perm:"competitors"},
+  {icon:"📦", label:"مراقبة المخزون",  v:"inventory",   perm:"inventory"},
+  {icon:"✨", label:"Content Studio",  v:"content",     perm:"content"},
+  {icon:"📚", label:"مكتبة الأوامر",  v:"library",     perm:"library"},
+  {icon:"👥", label:"المستخدمون",      v:"users",       perm:"users"},
+  {icon:"🤖", label:"إدخال المنتجات AI", v:"ai-import",   perm:"ai-import"},
 ];
 
 const inputStyle: React.CSSProperties = {
@@ -55,6 +78,26 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [user, setUser] = useState<{ email: string; company: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<WesalUser|null>(null);
+
+  // ── Users Management ──────────────────────────────
+  const [users, setUsers] = useState<WesalUser[]>([]);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("wesal_users");
+      if (saved) { setUsers(JSON.parse(saved)); }
+      else {
+        const admin:WesalUser={id:"admin_1",name:"المدير",email:"admin@wesal.app",role:"admin",createdAt:new Date().toISOString(),active:true};
+        setUsers([admin]); localStorage.setItem("wesal_users",JSON.stringify([admin]));
+      }
+    } catch { setUsers([]); }
+  }, []);
+  const saveUsers = (u:WesalUser[])=>{setUsers(u);try{localStorage.setItem("wesal_users",JSON.stringify(u));}catch{}};
+  const addUser    = (u:Omit<WesalUser,"id"|"createdAt">)=>saveUsers([...users,{...u,id:`user_${Date.now()}`,createdAt:new Date().toISOString()}]);
+  const updateUser = (id:string,updates:Partial<WesalUser>)=>saveUsers(users.map(u=>u.id===id?{...u,...updates}:u));
+  const deleteUser = (id:string)=>{if(id==="admin_1")return;saveUsers(users.filter(u=>u.id!==id));};
+  const toggleUser = (id:string)=>saveUsers(users.map(u=>u.id===id?{...u,active:!u.active}:u));
+  const canAccess  = (perm:string)=>currentUser?ROLE_PERMISSIONS[currentUser.role].includes(perm):false;
 
   useEffect(() => {
     loadXLSX();
@@ -251,7 +294,7 @@ export default function Home() {
       const u = { email, company: email.split("@")[0] };
       localStorage.setItem("wesal_token", data.token);
       localStorage.setItem("wesal_user", JSON.stringify(u));
-      setUser(u); setView("dashboard");
+      setUser(u); const mu=users.find(wu=>wu.email===email&&wu.active); setCurrentUser(mu||{id:"s1",name:email.split("@")[0],email,role:"admin",createdAt:new Date().toISOString(),active:true}); setView("dashboard");
     } catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "حدث خطأ"); }
     finally { setAuthLoading(false); }
   };
@@ -265,7 +308,7 @@ export default function Home() {
       const u = { email, company: companyName };
       localStorage.setItem("wesal_token", data.token);
       localStorage.setItem("wesal_user", JSON.stringify(u));
-      setUser(u); setView("dashboard");
+      setUser(u); const mu=users.find(wu=>wu.email===email&&wu.active); setCurrentUser(mu||{id:"s1",name:email.split("@")[0],email,role:"admin",createdAt:new Date().toISOString(),active:true}); setView("dashboard");
     } catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "حدث خطأ"); }
     finally { setAuthLoading(false); }
   };
@@ -487,17 +530,37 @@ export default function Home() {
 
 
   // ── Sidebar JSX ──
-  const sidebarJSX = (
-    <div style={{ width: "240px", background: "#f5f5fb", borderLeft: "1px solid #e0e0f0", padding: "32px 20px", display: "flex", flexDirection: "column", gap: "8px", minHeight: "100vh", flexShrink: 0 }}>
-      <div style={{ fontSize: "22px", fontWeight: "900", color: "#7c3aed", marginBottom: "32px" }}>وصال</div>
-      {NAV.map(item => (
-        <div key={item.label} onClick={() => setView(item.v as ViewType)}
-          style={{ padding: "10px 14px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", background: view === item.v && (item.v === "competitors" || item.v === "inventory") ? "#1a1a2e" : view === "dashboard" && item.v === "dashboard" && item.label === "لوحة التحكم" ? "#1a1a2e" : "transparent", color: (view === item.v && (item.v === "competitors" || item.v === "inventory")) || (view === "dashboard" && item.label === "لوحة التحكم") ? "#7c3aed" : "#666", fontSize: "14px", fontWeight: "500" }}>
-          <span>{item.icon}</span>{item.label}
+  const sidebarJSX = currentUser ? (
+    <div style={{width:"220px",flexShrink:0,background:"var(--color-background-primary)",borderLeft:"0.5px solid var(--color-border-tertiary)",display:"flex",flexDirection:"column",minHeight:"100vh",fontFamily:"'Tajawal',sans-serif",direction:"rtl"}}>
+      <div style={{padding:"20px 16px 14px",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+        <p style={{fontSize:"22px",fontWeight:"700",color:"#534AB7",margin:0}}>وصال</p>
+        <p style={{fontSize:"10px",color:"var(--color-text-tertiary)",margin:"2px 0 0"}}>منصة التجارة الذكية</p>
+      </div>
+      <nav style={{flex:1,padding:"10px 8px",display:"flex",flexDirection:"column",gap:"2px"}}>
+        {NAV.filter(item=>ROLE_PERMISSIONS[currentUser.role].includes(item.perm)).map(item=>(
+          <button key={item.v} onClick={()=>setView(item.v as ViewType)}
+            style={{display:"flex",alignItems:"center",gap:"10px",padding:"9px 12px",width:"100%",border:"none",borderRadius:"8px",cursor:"pointer",fontFamily:"inherit",fontSize:"13px",textAlign:"right",background:view===item.v?"#EEEDFE":"transparent",color:view===item.v?"#534AB7":"var(--color-text-secondary)",fontWeight:view===item.v?"600":"400"}}>
+            <span style={{fontSize:"14px"}}>{item.icon}</span>{item.label}
+          </button>
+        ))}
+      </nav>
+      <div style={{padding:"12px 14px",borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}}>
+          <div style={{width:32,height:32,borderRadius:"50%",background:"#EEEDFE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",fontWeight:"600",color:"#534AB7",flexShrink:0}}>
+            {currentUser.name.substring(0,1)}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{fontSize:"12px",fontWeight:"600",color:"var(--color-text-primary)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{currentUser.name}</p>
+            <p style={{fontSize:"10px",color:"var(--color-text-tertiary)",margin:0}}>{ROLE_LABELS[currentUser.role]}</p>
+          </div>
         </div>
-      ))}
-      <div style={{ marginTop: "auto", padding: "10px 14px", borderRadius: "10px", background: "#1a1a2e", cursor: "pointer" }} onClick={() => { localStorage.removeItem("wesal_token"); localStorage.removeItem("wesal_user"); setView("landing"); setUser(null); }}>
-        <span style={{ color: "#ff6b6b", fontSize: "14px" }}>⬡ تسجيل الخروج</span>
+        <button onClick={()=>{localStorage.removeItem("wesal_token");localStorage.removeItem("wesal_user");setUser(null);setCurrentUser(null);setErpData(null);setView("login");}} style={{width:"100%",padding:"6px",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:"7px",color:"var(--color-text-secondary)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"}}>تسجيل الخروج</button>
+      </div>
+    </div>
+  ) : (
+    <div style={{width:"220px",flexShrink:0,background:"var(--color-background-primary)",borderLeft:"0.5px solid var(--color-border-tertiary)",display:"flex",flexDirection:"column",minHeight:"100vh",fontFamily:"'Tajawal',sans-serif",direction:"rtl"}}>
+      <div style={{padding:"20px 16px",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+        <p style={{fontSize:"22px",fontWeight:"700",color:"#534AB7",margin:0}}>وصال</p>
       </div>
     </div>
   );
@@ -754,292 +817,157 @@ export default function Home() {
   // ══════════════════════════════════════
   // REPORTS / EXECUTIVE DASHBOARD VIEW
   // ══════════════════════════════════════
-  if (view === "reports") {
-    const d = erpData as any;
-    const sev = (n, t1, t2) => !d ? "good" : n > t1 ? "critical" : n > t2 ? "warning" : "good";
-    const sevColor = (s) => s === "critical" ? "#E24B4A" : s === "warning" ? "#EF9F27" : "#1D9E75";
-    const sevBg = (s) => s === "critical" ? "#FCEBEB" : s === "warning" ? "#FAEEDA" : "#E1F5EE";
-    const sevLabel = (s) => s === "critical" ? "حرج" : s === "warning" ? "تحذير" : "جيد";
-
-    const kpis = [
-      { n:"الطلبات المتأخرة",  val: d?.late_orders?.count??0,       unit:"طلب",  target:"الهدف: أقل من 10",  sev: sev(d?.late_orders?.count||0,10,0) },
-      { n:"الطلبات العالقة",   val: d?.stuck_orders?.count??0,      unit:"طلب",  target:"الهدف: أقل من 5",   sev: sev(d?.stuck_orders?.count||0,8,3) },
-      { n:"وقت المعالجة",      val: d?.avg_processing_days?.value??0,unit:"يوم",  target:"الهدف: 1.5 يوم",    sev: !d?"good":d?.avg_processing_days?.value>3?"critical":d?.avg_processing_days?.value>1.5?"warning":"good" },
-      { n:"المنتجات النافدة",  val: d?.out_of_stock?.count??0,      unit:"SKU",  target:"الهدف: صفر",         sev: sev(d?.out_of_stock?.count||0,5,0) },
-      { n:"قريبة من النفاد",   val: d?.low_stock?.count??0,         unit:"SKU",  target:"الهدف: أقل من 15",  sev: sev(d?.low_stock?.count||0,20,0) },
-      { n:"تأخر الموردين",     val: d?.late_po?.count??0,           unit:"PO",   target:"الهدف: صفر",         sev: sev(d?.late_po?.count||0,5,0) },
-      { n:"الشكاوى المفتوحة", val: d?.open_complaints?.count??0,   unit:"شكوى", target:"الهدف: صفر",         sev: sev(d?.open_complaints?.count||0,5,0) },
-      { n:"وقت الرد",          val: d?.avg_response_hours?.value??0, unit:"ساعة", target:"الهدف: 2 ساعة",     sev: !d?"good":d?.avg_response_hours?.value>6?"critical":d?.avg_response_hours?.value>2?"warning":"good" },
-      { n:"المبيعات",           val: d?.daily_sales?.value??0,       unit:"ر.س",  target:"الهدف: 20,000",      sev: !d?"good":d?.daily_sales?.value>=20000?"good":d?.daily_sales?.value>=10000?"warning":"critical" },
-      { n:"التوصيل في الوقت",  val: d?.on_time_delivery?.pct??0,    unit:"%",    target:"الهدف: 95%",         sev: !d?"good":(d?.on_time_delivery?.pct||0)>=95?"good":(d?.on_time_delivery?.pct||0)>=80?"warning":"critical" },
-    ];
-
-    const critical = kpis.filter(k=>k.sev==="critical").length;
-    const warning  = kpis.filter(k=>k.sev==="warning").length;
-    const good     = kpis.filter(k=>k.sev==="good").length;
-
-    // Employee data
-    const employees = d?.employee_performance?.employees || [];
-    const procSpeed = d?.procurement_speed;
-    const shipSpeed = d?.shipping_speed;
-
-    // Sales trend (daily_sales value as single point — will expand later)
-    const revenue  = d?.daily_sales?.value || 0;
-    const orders   = d?.stuck_orders?.count || 0;
-    const aov      = orders > 0 ? Math.round(revenue / orders) : 0;
-    const fulfRate = d?.on_time_delivery?.pct || 0;
-    const delayRate = d?.late_orders?.count > 0 && d?.stuck_orders?.count > 0
-      ? Math.round((d.late_orders.count / Math.max(d.stuck_orders.count, 1)) * 100)
-      : 0;
-
-    // AI decisions
-    const aiDecisions: any[] = [];
-    if ((d?.late_po?.count||0) > 5)   aiDecisions.push({ title:"استبدل المورد المتأخر", reason:`${d.late_po.count} أوامر شراء متأخرة تؤثر على التنفيذ`, priority:"عالية", color:"#534AB7", bg:"#EEEDFE" });
-    if ((d?.out_of_stock?.count||0) > 0) aiDecisions.push({ title:"أوامر شراء فورية للمنتجات النافدة", reason:`${d.out_of_stock.count} SKU نفدت — يؤثر على المبيعات`, priority:"عالية", color:"#A32D2D", bg:"#FCEBEB" });
-    if ((d?.late_orders?.count||0) > 10) aiDecisions.push({ title:"تحقق في تأخيرات الشحن", reason:`${d.late_orders.count} طلب متأخر — راجع شركة الشحن`, priority:"مراجعة", color:"#854F0B", bg:"#FAEEDA" });
-    if (revenue > 15000) aiDecisions.push({ title:"ارفع أسعار المنتجات الأفضل مبيعاً", reason:"الطلب مرتفع — فرصة لتحسين الهامش", priority:"اقتراح", color:"#0F6E56", bg:"#E1F5EE" });
-    if (aiDecisions.length === 0) aiDecisions.push({ title:"الأداء ضمن الحدود المقبولة", reason:"لا توجد إجراءات عاجلة مطلوبة", priority:"جيد", color:"#0F6E56", bg:"#E1F5EE" });
-
-    const iStyle: React.CSSProperties = { fontFamily:"'Tajawal',sans-serif", direction:"rtl" };
-
+  // ── USERS VIEW ────────────────────────────────────────
+  if (view === "users" && canAccess("users")) {
+    const PERM_LABELS:Record<string,string>={dashboard:"لوحة التحكم",reports:"التقارير",competitors:"المنافسين",inventory:"المخزون",content:"Content Studio",library:"مكتبة الأوامر",users:"المستخدمون"};
+    const ROLES:UserRole[]=["admin","manager","operations","sales","viewer"];
+    const [uModal, setUModal] = useState<"add"|"edit"|null>(null);
+    const [uEdit, setUEdit] = useState<any>({name:"",email:"",role:"viewer"});
+    const [uSearch, setUSearch] = useState("");
+    const [uFilter, setUFilter] = useState<UserRole|"all">("all");
+    const filtered = users.filter((u:WesalUser)=>{
+      const ms=!uSearch||u.name.includes(uSearch)||u.email.includes(uSearch);
+      const mr=uFilter==="all"||u.role===uFilter;
+      return ms&&mr;
+    });
+    const openAdd=()=>{setUEdit({name:"",email:"",role:"viewer"});setUModal("add");};
+    const openEdit=(u:WesalUser)=>{setUEdit({...u});setUModal("edit");};
+    const handleUSave=()=>{
+      if(!uEdit.name?.trim()||!uEdit.email?.trim())return alert("الاسم والإيميل مطلوبان");
+      if(uModal==="add")addUser({name:uEdit.name,email:uEdit.email,role:uEdit.role,active:true});
+      else updateUser(uEdit.id,{name:uEdit.name,email:uEdit.email,role:uEdit.role});
+      setUModal(null);
+    };
+    const handleUDel=(id:string)=>{if(id===currentUser?.id)return alert("لا يمكنك حذف حسابك");if(confirm("حذف؟")){deleteUser(id);setUModal(null);}};
+    const iS:React.CSSProperties={width:"100%",padding:"8px 10px",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:"8px",color:"var(--color-text-primary)",fontSize:"12px",outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
     return (
-      <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"var(--color-background-tertiary)", color:"var(--color-text-primary)" }}>
-        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-        <style>{`
-          @keyframes spin{to{transform:rotate(360deg)}}
-          @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-          .exec-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:14px 16px;}
-          .exec-metric{background:var(--color-background-secondary);border-radius:8px;padding:14px 16px;}
-        `}</style>
-        <div style={{ display:"flex", minHeight:"100vh" }}>
+      <div style={{fontFamily:"'Tajawal',sans-serif",direction:"rtl",minHeight:"100vh",background:"var(--color-background-tertiary)"}}>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet"/>
+        <div style={{display:"flex",minHeight:"100vh"}}>
           {sidebarJSX}
-          <div style={{ flex:1, padding:"24px", overflowY:"auto", display:"flex", flexDirection:"column", gap:"16px" }}>
-
-            {/* Header */}
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div style={{flex:1,padding:"24px",overflowY:"auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"20px"}}>
               <div>
-                <h1 style={{ fontSize:"20px", fontWeight:"500", margin:"0 0 4px" }}>لوحة التحكم التنفيذية</h1>
-                <p style={{ fontSize:"12px", color:"var(--color-text-secondary)", margin:0 }}>
-                  {d ? `البيانات من ${d.from_date} إلى ${d.to_date}` : "جاري تحميل البيانات..."}
-                </p>
+                <h1 style={{fontSize:"20px",fontWeight:"500",margin:"0 0 3px",color:"var(--color-text-primary)"}}>👥 المستخدمون</h1>
+                <p style={{fontSize:"12px",color:"var(--color-text-tertiary)",margin:0}}>{users.length} مستخدم</p>
               </div>
-              <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
-                {(["اليوم","الأسبوع","الشهر","الربع","السنة"] as const).map((label, idx) => (
-                  <button key={idx} onClick={() => { setTimePeriod(idx); fetchKpis(["today","week","month","quarter","year"][idx]); }}
-                    style={{ padding:"6px 12px", background:timePeriod===idx?"#534AB7":"var(--color-background-primary)", border:`0.5px solid ${timePeriod===idx?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"7px", color:timePeriod===idx?"#EEEDFE":"var(--color-text-secondary)", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
-                    {label}
-                  </button>
+              <button onClick={openAdd} style={{padding:"9px 18px",background:"#534AB7",color:"#EEEDFE",border:"none",borderRadius:"8px",fontSize:"13px",fontWeight:"600",cursor:"pointer",fontFamily:"inherit"}}>+ إضافة مستخدم</button>
+            </div>
+            {/* Role Cards */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"8px",marginBottom:"16px"}}>
+              {ROLES.map(r=>{const count=users.filter((u:WesalUser)=>u.role===r).length;return(
+                <div key={r} onClick={()=>setUFilter(uFilter===r?"all":r)} style={{background:uFilter===r?ROLE_COLORS[r].bg:"var(--color-background-primary)",border:`0.5px solid ${uFilter===r?ROLE_COLORS[r].text+"40":"var(--color-border-tertiary)"}`,borderRadius:"10px",padding:"10px 12px",cursor:"pointer"}}>
+                  <p style={{fontSize:"11px",color:ROLE_COLORS[r].text,margin:"0 0 4px",fontWeight:"500"}}>{ROLE_LABELS[r]}</p>
+                  <p style={{fontSize:"20px",fontWeight:"500",color:"var(--color-text-primary)",margin:0}}>{count}</p>
+                </div>
+              );})}
+            </div>
+            {/* Search */}
+            <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:"10px",padding:"10px 14px",marginBottom:"14px",display:"flex",gap:"10px",alignItems:"center"}}>
+              <input value={uSearch} onChange={e=>setUSearch(e.target.value)} placeholder="🔍 بحث..." style={{...iS,width:"220px"}}/>
+              <button onClick={()=>setUFilter("all")} style={{padding:"6px 14px",background:uFilter==="all"?"#534AB7":"var(--color-background-secondary)",border:`0.5px solid ${uFilter==="all"?"#534AB7":"var(--color-border-secondary)"}`,borderRadius:"7px",color:uFilter==="all"?"#EEEDFE":"var(--color-text-secondary)",fontSize:"11px",cursor:"pointer",fontFamily:"inherit"}}>الكل</button>
+            </div>
+            {/* Table */}
+            <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:"12px",overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
+                <thead><tr style={{background:"var(--color-background-secondary)"}}>
+                  {["المستخدم","الدور","الصلاحيات","الحالة","إجراء"].map((h,i)=>(
+                    <th key={i} style={{padding:"10px 14px",textAlign:"right",fontWeight:"500",color:"var(--color-text-secondary)",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {filtered.map((u:WesalUser,i:number)=>(
+                    <tr key={u.id} style={{borderBottom:i<filtered.length-1?"0.5px solid var(--color-border-tertiary)":"none"}}>
+                      <td style={{padding:"12px 14px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                          <div style={{width:32,height:32,borderRadius:"50%",background:ROLE_COLORS[u.role].bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",fontWeight:"600",color:ROLE_COLORS[u.role].text,flexShrink:0}}>{u.name.substring(0,1)}</div>
+                          <div><p style={{fontSize:"12px",fontWeight:"500",color:"var(--color-text-primary)",margin:0}}>{u.name}</p><p style={{fontSize:"10px",color:"var(--color-text-tertiary)",margin:0}}>{u.email}</p></div>
+                          {u.id===currentUser?.id&&<span style={{fontSize:"9px",background:"#EEEDFE",color:"#534AB7",padding:"1px 6px",borderRadius:"8px"}}>أنت</span>}
+                        </div>
+                      </td>
+                      <td style={{padding:"12px 14px"}}><span style={{fontSize:"11px",background:ROLE_COLORS[u.role].bg,color:ROLE_COLORS[u.role].text,padding:"3px 10px",borderRadius:"20px"}}>{ROLE_LABELS[u.role]}</span></td>
+                      <td style={{padding:"12px 14px"}}><div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>{ROLE_PERMISSIONS[u.role].map(p=><span key={p} style={{fontSize:"9px",background:"var(--color-background-secondary)",color:"var(--color-text-secondary)",padding:"1px 6px",borderRadius:"6px"}}>{PERM_LABELS[p]||p}</span>)}</div></td>
+                      <td style={{padding:"12px 14px"}}><button onClick={()=>u.id!==currentUser?.id&&toggleUser(u.id)} style={{padding:"4px 12px",background:u.active?"#E1F5EE":"#FCEBEB",border:`0.5px solid ${u.active?"#1D9E7540":"#E24B4A40"}`,borderRadius:"20px",color:u.active?"#0F6E56":"#A32D2D",fontSize:"11px",cursor:u.id===currentUser?.id?"default":"pointer",fontFamily:"inherit"}}>{u.active?"نشط":"موقوف"}</button></td>
+                      <td style={{padding:"12px 14px"}}><div style={{display:"flex",gap:"5px"}}>
+                        <button onClick={()=>openEdit(u)} style={{fontSize:"10px",padding:"3px 8px",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:"5px",cursor:"pointer",color:"var(--color-text-secondary)",fontFamily:"inherit"}}>تعديل</button>
+                        {u.id!==currentUser?.id&&<button onClick={()=>handleUDel(u.id)} style={{fontSize:"10px",padding:"3px 8px",background:"#FCEBEB",border:"0.5px solid #F7C1C1",borderRadius:"5px",cursor:"pointer",color:"#A32D2D",fontFamily:"inherit"}}>حذف</button>}
+                      </div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Permissions Reference */}
+            <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:"12px",padding:"16px",marginTop:"16px"}}>
+              <p style={{fontSize:"13px",fontWeight:"500",margin:"0 0 12px",color:"var(--color-text-primary)"}}>مرجع الصلاحيات</p>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"8px"}}>
+                {ROLES.map(r=>(
+                  <div key={r} style={{background:"var(--color-background-secondary)",borderRadius:"8px",padding:"10px 12px"}}>
+                    <span style={{fontSize:"11px",background:ROLE_COLORS[r].bg,color:ROLE_COLORS[r].text,padding:"2px 8px",borderRadius:"20px",display:"inline-block",marginBottom:"8px"}}>{ROLE_LABELS[r]}</span>
+                    {ROLE_PERMISSIONS[r].map(p=><p key={p} style={{fontSize:"10px",color:"var(--color-text-secondary)",margin:"2px 0"}}>✓ {PERM_LABELS[p]||p}</p>)}
+                  </div>
                 ))}
-                <button onClick={() => fetchKpis(["today","week","month","quarter","year"][timePeriod])}
-                  style={{ padding:"6px 12px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"7px", color:"var(--color-text-secondary)", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
-                  ↺ تحديث
-                </button>
               </div>
             </div>
-
-            {/* Status Summary */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px" }}>
-              {[
-                {label:"حرج", count:critical, bg:"#FCEBEB", color:"#A32D2D", icon:"🔴"},
-                {label:"تحذير", count:warning, bg:"#FAEEDA", color:"#854F0B", icon:"🟡"},
-                {label:"جيد",  count:good,    bg:"#E1F5EE", color:"#0F6E56", icon:"🟢"},
-              ].map(s => (
-                <div key={s.label} style={{ background:s.bg, borderRadius:"10px", padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <div>
-                    <p style={{ fontSize:"12px", color:s.color, margin:"0 0 4px", fontWeight:"500" }}>{s.icon} {s.label}</p>
-                    <p style={{ fontSize:"24px", fontWeight:"500", color:s.color, margin:0 }}>{s.count} مؤشر</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* KPI Cards Row 1 */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:"10px" }}>
-              {kpis.slice(0,5).map((k,i) => (
-                <div key={i} className="exec-metric">
-                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px" }}>{k.n}</p>
-                  <p style={{ fontSize:"20px", fontWeight:"500", color:sevColor(k.sev), margin:"0 0 4px" }}>
-                    {typeof k.val === "number" && k.unit === "ر.س" ? k.val.toLocaleString("ar-SA") : k.val} {k.unit}
-                  </p>
-                  <span style={{ fontSize:"10px", background:sevBg(k.sev), color:sevColor(k.sev), padding:"1px 7px", borderRadius:"20px" }}>{sevLabel(k.sev)}</span>
-                  <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:"5px 0 0" }}>{k.target}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* KPI Cards Row 2 */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:"10px" }}>
-              {kpis.slice(5).map((k,i) => (
-                <div key={i} className="exec-metric">
-                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px" }}>{k.n}</p>
-                  <p style={{ fontSize:"20px", fontWeight:"500", color:sevColor(k.sev), margin:"0 0 4px" }}>
-                    {typeof k.val === "number" && k.unit === "ر.س" ? k.val.toLocaleString("ar-SA") : k.val} {k.unit}
-                  </p>
-                  <span style={{ fontSize:"10px", background:sevBg(k.sev), color:sevColor(k.sev), padding:"1px 7px", borderRadius:"20px" }}>{sevLabel(k.sev)}</span>
-                  <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:"5px 0 0" }}>{k.target}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Middle Row: Operations + Suppliers + Employees */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
-
-              {/* Operations */}
-              <div className="exec-card">
-                <p style={{ fontSize:"13px", fontWeight:"500", margin:"0 0 12px" }}>العمليات</p>
-                <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-                  {[
-                    { label:"معدل التوصيل في الوقت", val:`${fulfRate}%`, target:95, sev:fulfRate>=95?"good":fulfRate>=80?"warning":"critical" },
-                    { label:"متوسط وقت التوصيل", val:`${shipSpeed?.avg_dn_days||"—"} يوم`, target:null, sev:"good" },
-                    { label:"سرعة الشراء", val:`${procSpeed?.avg_days_to_delivery||"—"} يوم`, target:null, sev:"good" },
-                  ].map((op,i) => (
-                    <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", background:"var(--color-background-secondary)", borderRadius:"8px" }}>
-                      <p style={{ fontSize:"12px", color:"var(--color-text-secondary)", margin:0 }}>{op.label}</p>
-                      <span style={{ fontSize:"13px", fontWeight:"500", color:sevColor(op.sev) }}>{op.val}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Procurement */}
-              <div className="exec-card">
-                <p style={{ fontSize:"13px", fontWeight:"500", margin:"0 0 12px" }}>المشتريات</p>
-                <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-                  <div style={{ padding:"10px 12px", background:"#E1F5EE", borderRadius:"8px" }}>
-                    <p style={{ fontSize:"11px", color:"#0F6E56", margin:"0 0 3px", fontWeight:"500" }}>أفضل مورد</p>
-                    <p style={{ fontSize:"13px", color:"#085041", margin:0 }}>
-                      {procSpeed?.details?.[0]?.supplier || "—"}
-                    </p>
-                    <p style={{ fontSize:"10px", color:"#0F6E56", margin:"2px 0 0" }}>
-                      {procSpeed?.details?.[0] ? `${procSpeed.details[0].days_to_delivery} يوم تسليم` : "لا بيانات"}
-                    </p>
-                  </div>
-                  <div style={{ padding:"10px 12px", background:"var(--color-background-secondary)", borderRadius:"8px" }}>
-                    <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 3px" }}>إجمالي أوامر الشراء</p>
-                    <p style={{ fontSize:"18px", fontWeight:"500", color:"var(--color-text-primary)", margin:0 }}>{procSpeed?.total_pos||0}</p>
-                  </div>
-                  <div style={{ padding:"8px 12px", background: (d?.late_po?.count||0)>0?"#FCEBEB":"#E1F5EE", borderRadius:"8px" }}>
-                    <p style={{ fontSize:"11px", color:(d?.late_po?.count||0)>0?"#A32D2D":"#0F6E56", margin:0 }}>
-                      {(d?.late_po?.count||0)>0 ? `${d.late_po.count} PO متأخر` : "لا توجد PO متأخرة ✓"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Employees */}
-              <div className="exec-card">
-                <p style={{ fontSize:"13px", fontWeight:"500", margin:"0 0 12px" }}>أداء الموظفين</p>
-                {employees.length > 0 ? (
-                  <div style={{ display:"flex", flexDirection:"column", gap:"7px" }}>
-                    {employees.slice(0,4).map((emp: any, i: number) => (
-                      <div key={i} style={{ display:"flex", alignItems:"center", gap:"8px", padding:"6px 8px", background:i===0?"#E1F5EE":"var(--color-background-secondary)", borderRadius:"8px" }}>
-                        <div style={{ width:28, height:28, borderRadius:"50%", background:i===0?"#5DCAA5":"var(--color-background-tertiary)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"10px", fontWeight:"500", color:i===0?"#04342C":"var(--color-text-secondary)", flexShrink:0 }}>
-                          {(emp.employee||"").substring(0,2)}
-                        </div>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <p style={{ fontSize:"11px", fontWeight:"500", color:i===0?"#085041":"var(--color-text-primary)", margin:"0 0 1px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{emp.employee||"—"}</p>
-                          <p style={{ fontSize:"10px", color:i===0?"#0F6E56":"var(--color-text-tertiary)", margin:0 }}>{emp.orders||0} طلب · {emp.avg_exec_days||"—"} يوم</p>
-                        </div>
-                        {i===0 && <span style={{ fontSize:"9px", background:"#E1F5EE", color:"#085041", padding:"1px 5px", borderRadius:"8px", flexShrink:0 }}>الأفضل</span>}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ textAlign:"center", padding:"20px 0", color:"var(--color-text-tertiary)" }}>
-                    <p style={{ fontSize:"12px", margin:0 }}>لا توجد بيانات موظفين</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Bottom Row: Alerts + AI Decisions + Chat */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
-
-              {/* Alerts */}
-              <div className="exec-card">
-                <p style={{ fontSize:"13px", fontWeight:"500", margin:"0 0 12px" }}>التنبيهات</p>
-                <div style={{ display:"flex", flexDirection:"column", gap:"7px" }}>
-                  {kpis.filter(k=>k.sev!=="good").length === 0 ? (
-                    <div style={{ padding:"12px", background:"#E1F5EE", borderRadius:"8px", textAlign:"center" }}>
-                      <p style={{ fontSize:"12px", color:"#0F6E56", margin:0 }}>لا توجد تنبيهات ✓</p>
-                    </div>
-                  ) : kpis.filter(k=>k.sev!=="good").map((k,i) => (
-                    <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:"8px", padding:"8px 10px", background:sevBg(k.sev), borderRadius:"8px" }}>
-                      <div style={{ width:6, height:6, borderRadius:"50%", background:sevColor(k.sev), marginTop:4, flexShrink:0 }}></div>
-                      <p style={{ fontSize:"11px", color:sevColor(k.sev), margin:0 }}>{k.n}: {typeof k.val === "number" && k.unit === "ر.س" ? k.val.toLocaleString("ar-SA") : k.val} {k.unit} — {sevLabel(k.sev)}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Decisions */}
-              <div className="exec-card">
-                <p style={{ fontSize:"13px", fontWeight:"500", margin:"0 0 12px" }}>قرارات الذكاء الاصطناعي</p>
-                <div style={{ display:"flex", flexDirection:"column", gap:"7px" }}>
-                  {aiDecisions.map((dec,i) => (
-                    <div key={i} style={{ padding:"8px 10px", background:dec.bg, borderRadius:"8px" }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"3px" }}>
-                        <span style={{ fontSize:"12px", fontWeight:"500", color:dec.color }}>{dec.title}</span>
-                        <span style={{ fontSize:"10px", background:dec.bg, color:dec.color, padding:"1px 6px", borderRadius:"8px", border:`0.5px solid ${dec.color}30` }}>{dec.priority}</span>
-                      </div>
-                      <p style={{ fontSize:"10px", color:dec.color, margin:0 }}>{dec.reason}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Chat */}
-              <div className="exec-card" style={{ display:"flex", flexDirection:"column" }}>
-                <p style={{ fontSize:"13px", fontWeight:"500", margin:"0 0 10px" }}>مساعد التقارير</p>
-                <div style={{ flex:1, overflowY:"auto", maxHeight:"200px", display:"flex", flexDirection:"column", gap:"6px", marginBottom:"10px" }}>
-                  {reportChat.length === 0 ? (
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:"5px" }}>
-                      {["ملخص الأداء","أبرز المشاكل","توصيات للأسبوع","مقارنة المبيعات"].map(q => (
-                        <button key={q} onClick={() => setReportChatInput(q)}
-                          style={{ padding:"5px 10px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"6px", color:"var(--color-text-secondary)", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
-                          {q}
-                        </button>
-                      ))}
-                    </div>
-                  ) : reportChat.map((m,i) => (
-                    <div key={i} style={{ padding:"8px 10px", background:m.role==="user"?"#EEEDFE":"var(--color-background-secondary)", borderRadius:"8px", alignSelf:m.role==="user"?"flex-start":"flex-end", maxWidth:"90%" }}>
-                      <p style={{ fontSize:"11px", color:m.role==="user"?"#534AB7":"var(--color-text-primary)", margin:0, lineHeight:"1.5" }}>{m.text}</p>
-                    </div>
-                  ))}
-                  {reportChatLoading && (
-                    <div style={{ padding:"8px 10px", background:"var(--color-background-secondary)", borderRadius:"8px", alignSelf:"flex-end" }}>
-                      <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>...</p>
-                    </div>
-                  )}
-                </div>
-                <div style={{ display:"flex", gap:"6px" }}>
-                  <input value={reportChatInput} onChange={e=>setReportChatInput(e.target.value)}
-                    onKeyDown={e=>e.key==="Enter"&&sendReportChat()}
-                    placeholder="اسأل عن الأداء..."
-                    style={{ flex:1, padding:"7px 10px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"7px", color:"var(--color-text-primary)", fontSize:"12px", outline:"none", fontFamily:"inherit" }} />
-                  <button onClick={sendReportChat} disabled={reportChatLoading||!reportChatInput.trim()}
-                    style={{ padding:"7px 14px", background:reportChatLoading||!reportChatInput.trim()?"var(--color-background-secondary)":"#534AB7", border:"none", borderRadius:"7px", color:reportChatLoading||!reportChatInput.trim()?"var(--color-text-tertiary)":"#EEEDFE", fontSize:"12px", cursor:reportChatLoading||!reportChatInput.trim()?"not-allowed":"pointer", fontFamily:"inherit" }}>
-                    إرسال
-                  </button>
-                </div>
-              </div>
-            </div>
-
           </div>
         </div>
+        {uModal&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+            <div style={{background:"var(--color-background-primary)",borderRadius:"14px",border:"0.5px solid var(--color-border-tertiary)",width:"460px",overflow:"hidden"}}>
+              <div style={{padding:"16px 20px",borderBottom:"0.5px solid var(--color-border-tertiary)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <p style={{fontSize:"14px",fontWeight:"600",color:"var(--color-text-primary)",margin:0}}>{uModal==="add"?"إضافة مستخدم جديد":"تعديل المستخدم"}</p>
+                <button onClick={()=>setUModal(null)} style={{width:28,height:28,background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:"50%",cursor:"pointer",color:"var(--color-text-secondary)",fontSize:"13px",fontFamily:"inherit"}}>✕</button>
+              </div>
+              <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:"14px"}}>
+                <div><p style={{fontSize:"11px",color:"var(--color-text-secondary)",margin:"0 0 5px",fontWeight:"500"}}>الاسم *</p><input value={uEdit.name||""} onChange={e=>setUEdit({...uEdit,name:e.target.value})} placeholder="اسم المستخدم" style={iS}/></div>
+                <div><p style={{fontSize:"11px",color:"var(--color-text-secondary)",margin:"0 0 5px",fontWeight:"500"}}>البريد الإلكتروني *</p><input value={uEdit.email||""} onChange={e=>setUEdit({...uEdit,email:e.target.value})} placeholder="email@example.com" style={{...iS,direction:"ltr",textAlign:"left"}}/></div>
+                <div>
+                  <p style={{fontSize:"11px",color:"var(--color-text-secondary)",margin:"0 0 6px",fontWeight:"500"}}>الدور والصلاحيات *</p>
+                  <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                    {ROLES.map(r=>(
+                      <label key={r} onClick={()=>setUEdit({...uEdit,role:r})} style={{display:"flex",alignItems:"flex-start",gap:"10px",padding:"10px 12px",background:uEdit.role===r?ROLE_COLORS[r].bg:"var(--color-background-secondary)",border:`0.5px solid ${uEdit.role===r?ROLE_COLORS[r].text+"40":"var(--color-border-tertiary)"}`,borderRadius:"8px",cursor:"pointer"}}>
+                        <div style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${uEdit.role===r?ROLE_COLORS[r].text:"var(--color-border-secondary)"}`,background:uEdit.role===r?ROLE_COLORS[r].text:"transparent",flexShrink:0,marginTop:2}}/>
+                        <div style={{flex:1}}>
+                          <p style={{fontSize:"12px",fontWeight:"500",color:ROLE_COLORS[r].text,margin:"0 0 3px"}}>{ROLE_LABELS[r]}</p>
+                          <p style={{fontSize:"10px",color:"var(--color-text-tertiary)",margin:0}}>{ROLE_PERMISSIONS[r].map(p=>PERM_LABELS[p]||p).join("، ")}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div style={{padding:"14px 20px",borderTop:"0.5px solid var(--color-border-tertiary)",display:"flex",justifyContent:uModal==="edit"?"space-between":"flex-end",alignItems:"center"}}>
+                {uModal==="edit"&&uEdit.id&&uEdit.id!==currentUser?.id&&<button onClick={()=>handleUDel(uEdit.id)} style={{padding:"8px 14px",background:"#FCEBEB",border:"0.5px solid #F7C1C1",borderRadius:"8px",color:"#A32D2D",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>حذف</button>}
+                <div style={{display:"flex",gap:"8px"}}>
+                  <button onClick={()=>setUModal(null)} style={{padding:"8px 18px",background:"var(--color-background-secondary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:"8px",color:"var(--color-text-secondary)",fontSize:"12px",cursor:"pointer",fontFamily:"inherit"}}>إلغاء</button>
+                  <button onClick={handleUSave} style={{padding:"8px 18px",background:"#534AB7",color:"#EEEDFE",border:"none",borderRadius:"8px",fontSize:"12px",fontWeight:"600",cursor:"pointer",fontFamily:"inherit"}}>{uModal==="add"?"إضافة":"حفظ"}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
+    if (view === "reports" && canAccess("reports")) {
+    return (
+      <ReportsView
+        sidebarJSX={sidebarJSX}
+        erpData={erpData}
+        timePeriod={timePeriod}
+        setTimePeriod={setTimePeriod}
+        fetchKpis={fetchKpis}
+        reportChat={reportChat}
+        reportChatInput={reportChatInput}
+        setReportChatInput={setReportChatInput}
+        reportChatLoading={reportChatLoading}
+        sendReportChat={sendReportChat}
+      />
+    );
+  }
 
-  // COMPETITORS VIEW
-  // ══════════════════════════════════════
-  // COMPETITORS VIEW — محدّث بالكامل
-  // ══════════════════════════════════════
-  // ══════════════════════════════════════
-  // COMPETITORS VIEW v2 — مواقع + منتجات
-  // ══════════════════════════════════════
-  if (view === "competitors") return (
+    if (view === "competitors") return (
     <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"#ffffff", color:"#1a1a2e" }}>
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
@@ -1287,32 +1215,19 @@ export default function Home() {
   // ══════════════════════════════════════
   // CONTENT STUDIO VIEW
   // ══════════════════════════════════════
-  if (view === "content") {
-    const ENV_STYLES = [
-      "Minimal Modern","Luxury Modern","Warm Cozy","Scandinavian",
-      "Hotel Style","Premium Arabic Interior","Outdoor Resort",
-      "Café Style","Office Style","Neutral Editorial"
-    ];
-    const CATEGORIES = [
-      "كنبة / أريكة","طاولة","إضاءة","كرسي","سرير",
-      "طاولة جانبية","طاولة قهوة","طاولة طعام",
-      "خزانة / وحدة TV","أثاث خارجي","ديكور","أخرى"
-    ];
-    return (
-      <ContentStudioView
-        sidebarJSX={sidebarJSX}
-        ENV_STYLES={ENV_STYLES}
-        CATEGORIES={CATEGORIES}
-        API_URL={API_URL}
-      />
-    );
+  if (view === "ai-import" && canAccess("ai-import")) {
+    return <AIProductImport sidebarJSX={sidebarJSX} />;
   }
 
-  if (view === "library") {
+  if (view === "content" && canAccess("content")) {
+    return <ContentStudioView sidebarJSX={sidebarJSX} />;
+  }
+
+    if (view === "library" && canAccess("library")) {
     return <PromptLibraryView sidebarJSX={sidebarJSX} />;
   }
 
-  if (view === "dashboard") return (
+    if (view === "dashboard") return (
     <div style={{ fontFamily: "'Tajawal', sans-serif", direction: "rtl", minHeight: "100vh", background: "#ffffff", color: "#1a1a2e" }}>
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
       <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -1417,7 +1332,6 @@ export default function Home() {
 
 
 // ══════════════════════════════════════
-// ContentStudioView Component
 // ══════════════════════════════════════════════════════════════
 // PROMPT LIBRARY — مكتبة الأوامر
 // ══════════════════════════════════════════════════════════════
@@ -1467,524 +1381,3 @@ const ALL_CATEGORIES = ["كنبة / أريكة","طاولة","إضاءة","كر�
 // ══════════════════════════════════════════════════════════════
 // PROMPT LIBRARY VIEW — جدول + modal إضافة/تعديل
 // ══════════════════════════════════════════════════════════════
-function PromptLibraryView({ sidebarJSX }: any) {
-  const loadLib = () => { try { const s = localStorage.getItem("wesal_prompt_library"); return s ? JSON.parse(s) : INITIAL_PROMPT_LIBRARY; } catch { return INITIAL_PROMPT_LIBRARY; } };
-  const [library, setLibrary]     = useState<any[]>(loadLib);
-  const [filterCat, setFilterCat] = useState("الكل");
-  const [filterType, setFilterType] = useState("الكل");
-  const [search, setSearch]       = useState("");
-  const [page, setPage]           = useState(1);
-  const [modal, setModal]         = useState<"add"|"edit"|null>(null);
-  const [editItem, setEditItem]   = useState<any>(null);
-  const [charCount, setCharCount] = useState(0);
-  const PER_PAGE = 10;
-
-  const saveLib = (items: any[]) => { setLibrary(items); try { localStorage.setItem("wesal_prompt_library", JSON.stringify(items)); } catch {} };
-
-  const filtered = library.filter(p => {
-    const matchCat  = filterCat === "الكل" || p.category === filterCat;
-    const matchType = filterType === "الكل" || p.type === filterType;
-    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.prompt.toLowerCase().includes(search.toLowerCase()) || (p.tags||"").toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchType && matchSearch;
-  });
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
-  const paged = filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
-
-  const openAdd = () => {
-    setEditItem({ id:"", name:"", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", tags:"", prompt:"" });
-    setCharCount(0);
-    setModal("add");
-  };
-  const openEdit = (p: any) => { setEditItem({...p}); setCharCount(p.prompt.length); setModal("edit"); };
-
-  const saveItem = () => {
-    if (!editItem.name.trim() || !editItem.prompt.trim()) return alert("الاسم والـ Prompt مطلوبان");
-    if (modal === "add") {
-      saveLib([...library, { ...editItem, id:`custom_${Date.now()}`, typeLabel: TYPE_LABELS[editItem.type]||editItem.type }]);
-    } else {
-      saveLib(library.map(p => p.id === editItem.id ? { ...editItem, typeLabel: TYPE_LABELS[editItem.type]||editItem.type } : p));
-    }
-    setModal(null);
-  };
-
-  const deleteItem = (id: string) => { if (confirm("حذف هذا الـ Prompt؟")) saveLib(library.filter(p => p.id !== id)); setModal(null); };
-
-  const iStyle: React.CSSProperties = { width:"100%", padding:"8px 10px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-primary)", fontSize:"12px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" as any };
-
-  return (
-    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"var(--color-background-tertiary)", color:"var(--color-text-primary)" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-      <div style={{ display:"flex", minHeight:"100vh" }}>
-        {sidebarJSX}
-        <div style={{ flex:1, padding:"24px", overflowY:"auto" }}>
-
-          {/* Header */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"20px" }}>
-            <div>
-              <h1 style={{ fontSize:"20px", fontWeight:"700", margin:"0 0 3px" }}>📚 مكتبة الأوامر</h1>
-              <p style={{ fontSize:"12px", color:"var(--color-text-tertiary)", margin:0 }}>Prompts جاهزة لتوليد صور المنتجات — {library.length} prompt</p>
-            </div>
-            <button onClick={openAdd} style={{ padding:"9px 18px", background:"#534AB7", color:"#EEEDFE", border:"none", borderRadius:"8px", fontSize:"13px", fontWeight:"600", cursor:"pointer", fontFamily:"inherit" }}>+ إضافة Prompt</button>
-          </div>
-
-          {/* Filters */}
-          <div style={{ background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:"10px", padding:"12px 16px", marginBottom:"16px", display:"flex", gap:"10px", flexWrap:"wrap", alignItems:"center" }}>
-            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="🔍 بحث بالاسم أو الـ Prompt أو الوسوم..." style={{ ...iStyle, width:"220px" }} />
-            <select value={filterCat} onChange={e => { setFilterCat(e.target.value); setPage(1); }} style={{ ...iStyle, width:"150px" }}>
-              <option value="الكل">كل الفئات</option>
-              {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <div style={{ display:"flex", gap:"5px" }}>
-              {(["الكل","white","env","dim"] as string[]).map(t => (
-                <button key={t} onClick={() => { setFilterType(t); setPage(1); }}
-                  style={{ padding:"6px 12px", background:filterType===t?"#534AB7":"var(--color-background-secondary)", border:`0.5px solid ${filterType===t?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"7px", color:filterType===t?"#EEEDFE":"var(--color-text-secondary)", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>
-                  {t === "الكل" ? "الكل" : TYPE_LABELS[t]}
-                </button>
-              ))}
-            </div>
-            <span style={{ fontSize:"11px", color:"var(--color-text-tertiary)", marginRight:"auto" }}>{filtered.length} نتيجة</span>
-          </div>
-
-          {/* Table */}
-          <div style={{ background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:"10px", overflow:"hidden" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
-              <thead>
-                <tr style={{ background:"var(--color-background-secondary)" }}>
-                  {["الاسم","الفئة","النوع","الـ Prompt","الوسوم","إجراء"].map((h,i) => (
-                    <th key={i} style={{ padding:"10px 14px", textAlign:i===3?"left":"right", fontWeight:"500", color:"var(--color-text-secondary)", borderBottom:"0.5px solid var(--color-border-tertiary)", whiteSpace:"nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paged.map((p, i) => (
-                  <tr key={p.id} style={{ borderBottom: i < paged.length-1 ? "0.5px solid var(--color-border-tertiary)" : "none", background: i%2===0 ? "var(--color-background-primary)" : "var(--color-background-secondary)" }}>
-                    <td style={{ padding:"10px 14px", fontWeight:"500", color:"var(--color-text-primary)", whiteSpace:"nowrap", maxWidth:"180px", overflow:"hidden", textOverflow:"ellipsis" }}>{p.name}</td>
-                    <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
-                      <span style={{ fontSize:"10px", background:(CAT_COLORS[p.category]||CAT_COLORS["أخرى"]).bg, color:(CAT_COLORS[p.category]||CAT_COLORS["أخرى"]).text, padding:"2px 8px", borderRadius:"20px" }}>{p.category}</span>
-                    </td>
-                    <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
-                      <span style={{ fontSize:"10px", background:(TYPE_COLORS[p.type]||{bg:"#f4f4fb",text:"#7070b0"}).bg, color:(TYPE_COLORS[p.type]||{bg:"#f4f4fb",text:"#7070b0"}).text, padding:"2px 8px", borderRadius:"20px" }}>{p.typeLabel}</span>
-                    </td>
-                    <td style={{ padding:"10px 14px", color:"var(--color-text-secondary)", direction:"ltr", maxWidth:"260px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.prompt}</td>
-                    <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
-                      {p.tags && <span style={{ fontSize:"10px", color:"var(--color-text-tertiary)" }}>{(p.tags||"").split(",").slice(0,2).join(", ")}</span>}
-                    </td>
-                    <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
-                      <div style={{ display:"flex", gap:"5px" }}>
-                        <button onClick={() => openEdit(p)} style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", cursor:"pointer", color:"var(--color-text-secondary)", fontFamily:"inherit" }}>تعديل</button>
-                        <button onClick={() => deleteItem(p.id)} style={{ fontSize:"10px", padding:"3px 8px", background:"#FCEBEB", border:"0.5px solid #F7C1C1", borderRadius:"5px", cursor:"pointer", color:"#A32D2D", fontFamily:"inherit" }}>حذف</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {paged.length === 0 && (
-              <div style={{ textAlign:"center", padding:"48px 0", color:"var(--color-text-tertiary)" }}>
-                <div style={{ fontSize:"32px", marginBottom:"8px" }}>📭</div>
-                <p style={{ fontSize:"13px", margin:0 }}>لا توجد نتائج</p>
-              </div>
-            )}
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div style={{ padding:"10px 16px", borderTop:"0.5px solid var(--color-border-tertiary)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <span style={{ fontSize:"11px", color:"var(--color-text-tertiary)" }}>عرض {(page-1)*PER_PAGE+1}–{Math.min(page*PER_PAGE, filtered.length)} من {filtered.length}</span>
-                <div style={{ display:"flex", gap:"5px" }}>
-                  <button onClick={() => setPage(p => Math.max(1,p-1))} disabled={page===1}
-                    style={{ padding:"5px 12px", fontSize:"11px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"6px", cursor:page===1?"not-allowed":"pointer", color:"var(--color-text-secondary)", fontFamily:"inherit", opacity:page===1?0.5:1 }}>
-                    السابق
-                  </button>
-                  {Array.from({length:Math.min(5,totalPages)},(_,i) => {
-                    const p = totalPages <= 5 ? i+1 : page <= 3 ? i+1 : page >= totalPages-2 ? totalPages-4+i : page-2+i;
-                    return (
-                      <button key={p} onClick={() => setPage(p)}
-                        style={{ padding:"5px 10px", fontSize:"11px", background:page===p?"#534AB7":"var(--color-background-secondary)", border:`0.5px solid ${page===p?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"6px", cursor:"pointer", color:page===p?"#EEEDFE":"var(--color-text-secondary)", fontFamily:"inherit" }}>
-                        {p}
-                      </button>
-                    );
-                  })}
-                  <button onClick={() => setPage(p => Math.min(totalPages,p+1))} disabled={page===totalPages}
-                    style={{ padding:"5px 12px", fontSize:"11px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"6px", cursor:page===totalPages?"not-allowed":"pointer", color:"var(--color-text-secondary)", fontFamily:"inherit", opacity:page===totalPages?0.5:1 }}>
-                    التالي
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Add / Edit Modal */}
-      {modal && editItem && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
-          <div style={{ background:"var(--color-background-primary)", borderRadius:"12px", border:"0.5px solid var(--color-border-tertiary)", width:"540px", maxHeight:"90vh", overflowY:"auto", display:"flex", flexDirection:"column" }}>
-
-            {/* Modal Header */}
-            <div style={{ padding:"16px 20px", borderBottom:"0.5px solid var(--color-border-tertiary)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div>
-                <p style={{ fontSize:"14px", fontWeight:"600", color:"var(--color-text-primary)", margin:"0 0 2px" }}>{modal==="add" ? "إضافة Prompt جديد" : "تعديل Prompt"}</p>
-                <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>{modal==="edit" ? editItem.name : "أضف prompt لمكتبة الأوامر"}</p>
-              </div>
-              <button onClick={() => setModal(null)} style={{ width:28, height:28, background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"50%", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:"13px", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"inherit" }}>✕</button>
-            </div>
-
-            {/* Modal Body */}
-            <div style={{ padding:"18px 20px", display:"flex", flexDirection:"column", gap:"14px", flex:1 }}>
-
-              {/* Name */}
-              <div>
-                <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>اسم الـ Prompt <span style={{ color:"#E24B4A" }}>*</span></p>
-                <input value={editItem.name} onChange={e => setEditItem({...editItem, name:e.target.value})} placeholder="مثال: Sofa — White Studio Premium" style={iStyle} />
-              </div>
-
-              {/* Category + Type */}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-                <div>
-                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>الفئة <span style={{ color:"#E24B4A" }}>*</span></p>
-                  <select value={editItem.category} onChange={e => setEditItem({...editItem, category:e.target.value})} style={iStyle}>
-                    {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>نوع المخرج <span style={{ color:"#E24B4A" }}>*</span></p>
-                  <select value={editItem.type} onChange={e => setEditItem({...editItem, type:e.target.value, typeLabel:TYPE_LABELS[e.target.value]||e.target.value})} style={iStyle}>
-                    {Object.entries(TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* Badge Preview */}
-              <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
-                <span style={{ fontSize:"10px", color:"var(--color-text-tertiary)" }}>معاينة:</span>
-                <span style={{ fontSize:"10px", background:(CAT_COLORS[editItem.category]||CAT_COLORS["أخرى"]).bg, color:(CAT_COLORS[editItem.category]||CAT_COLORS["أخرى"]).text, padding:"2px 10px", borderRadius:"20px" }}>{editItem.category}</span>
-                <span style={{ fontSize:"10px", background:(TYPE_COLORS[editItem.type]||{bg:"#f4f4fb",text:"#7070b0"}).bg, color:(TYPE_COLORS[editItem.type]||{bg:"#f4f4fb",text:"#7070b0"}).text, padding:"2px 10px", borderRadius:"20px" }}>{TYPE_LABELS[editItem.type]||editItem.type}</span>
-              </div>
-
-              {/* Prompt */}
-              <div>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"5px" }}>
-                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0, fontWeight:"500" }}>نص الـ Prompt <span style={{ color:"#E24B4A" }}>*</span></p>
-                  <span style={{ fontSize:"10px", color:charCount > 1800 ? "#E24B4A" : "var(--color-text-tertiary)" }}>{charCount} / 2000</span>
-                </div>
-                <textarea
-                  value={editItem.prompt}
-                  onChange={e => { setEditItem({...editItem, prompt:e.target.value}); setCharCount(e.target.value.length); }}
-                  maxLength={2000}
-                  rows={6}
-                  style={{ ...iStyle, resize:"vertical", direction:"ltr", textAlign:"left", lineHeight:"1.6", fontSize:"11px" }}
-                  placeholder="Professional product photography of..."
-                />
-                <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:"4px 0 0" }}>تلميح: أضف دائماً — Keep the product exactly the same shape, color, material, structure.</p>
-              </div>
-
-              {/* Tags */}
-              <div>
-                <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>وسوم (اختياري)</p>
-                <input value={editItem.tags||""} onChange={e => setEditItem({...editItem, tags:e.target.value})} placeholder="premium, 8K, luxury, arabic..." style={iStyle} />
-                <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:"4px 0 0" }}>افصل بين الوسوم بفاصلة — تُستخدم في البحث</p>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div style={{ padding:"14px 20px", borderTop:"0.5px solid var(--color-border-tertiary)", display:"flex", justifyContent:modal==="edit"?"space-between":"flex-end", alignItems:"center" }}>
-              {modal === "edit" && (
-                <button onClick={() => deleteItem(editItem.id)} style={{ padding:"8px 14px", background:"#FCEBEB", border:"0.5px solid #F7C1C1", borderRadius:"8px", color:"#A32D2D", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>حذف</button>
-              )}
-              <div style={{ display:"flex", gap:"8px" }}>
-                <button onClick={() => setModal(null)} style={{ padding:"8px 18px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-secondary)", fontSize:"12px", cursor:"pointer", fontFamily:"inherit" }}>إلغاء</button>
-                <button onClick={saveItem} style={{ padding:"8px 18px", background:"#534AB7", color:"#EEEDFE", border:"none", borderRadius:"8px", fontSize:"12px", fontWeight:"600", cursor:"pointer", fontFamily:"inherit" }}>
-                  {modal === "add" ? "حفظ الـ Prompt" : "حفظ التعديلات"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// CONTENT STUDIO VIEW — Dropdown + Output Grid + History
-// ══════════════════════════════════════════════════════════════
-function ContentStudioView({ sidebarJSX, ENV_STYLES, CATEGORIES, API_URL }: any) {
-  const loadLib = () => { try { const s = localStorage.getItem("wesal_prompt_library"); return s ? JSON.parse(s) : INITIAL_PROMPT_LIBRARY; } catch { return INITIAL_PROMPT_LIBRARY; } };
-
-  const [imagePreview, setImagePreview] = useState<string|null>(null);
-  const [imageBase64, setImageBase64]   = useState<string|null>(null);
-  const [imageUrl, setImageUrl]         = useState("");
-  const [category, setCategory]         = useState("كنبة / أريكة");
-  const [activeType, setActiveType]     = useState("white");
-  const [selectedPromptId, setSelectedPromptId] = useState("");
-  const [customPrompt, setCustomPrompt] = useState("");
-  const [genLoading, setGenLoading]     = useState(false);
-  const [genImages, setGenImages]       = useState<Record<string,string>>({});
-  const [history, setHistory]           = useState<any[]>([]);
-  const [historyModal, setHistoryModal] = useState<any>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  // Prompts للفئة + النوع المحدد
-  const getPromptsForSelection = () => {
-    const lib = loadLib();
-    return lib.filter((p: any) => p.category === category && p.type === activeType);
-  };
-
-  const promptsForSelection = getPromptsForSelection();
-
-  // تحديد أول prompt تلقائياً عند تغيير الفئة أو النوع
-  const prevCatType = useRef({ category, activeType });
-  if (prevCatType.current.category !== category || prevCatType.current.activeType !== activeType) {
-    prevCatType.current = { category, activeType };
-    const newPrompts = loadLib().filter((p: any) => p.category === category && p.type === activeType);
-    if (newPrompts.length > 0) setSelectedPromptId(newPrompts[0].id);
-    else setSelectedPromptId("");
-  }
-
-  const selectedPrompt = loadLib().find((p: any) => p.id === selectedPromptId);
-
-  // ضغط الصورة لـ 2MB
-  const compressImage = (file: File): Promise<string> => new Promise(resolve => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const maxDim = 1920;
-      let w = img.width, h = img.height;
-      if (w > maxDim || h > maxDim) { if (w > h) { h = Math.round(h*maxDim/w); w = maxDim; } else { w = Math.round(w*maxDim/h); h = maxDim; } }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      const compress = (q: number) => {
-        const d = canvas.toDataURL("image/jpeg", q);
-        if (Math.round((d.length-22)*3/4) > 2*1024*1024 && q > 0.3) compress(Math.max(q-0.08, 0.3));
-        else resolve(d.split(",")[1]);
-      };
-      compress(0.92);
-    };
-    img.src = url;
-  });
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setImagePreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-    setImageBase64(await compressImage(file));
-  };
-
-  const generateImage = async () => {
-    if (!selectedPrompt) return alert("اختر Prompt من القائمة");
-    if (!imageBase64 && !imageUrl) return alert("ارفع صورة المنتج أولاً");
-    setGenLoading(true);
-    const removeText = "Remove any text, watermarks, logos, stickers or written characters from the original product image. ";
-    const custom = customPrompt.trim() ? ` ${customPrompt.trim()}` : "";
-    const fullPrompt = `${removeText}${selectedPrompt.prompt}${custom}`;
-    try {
-      const res = await fetch(`${API_URL}/content-studio/generate-image`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ prompt:fullPrompt, image_base64:imageBase64||"", image_url:imageUrl, mode:activeType, width:1024, height:1024 })
-      });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.detail||"خطأ"); }
-      const data = await res.json();
-      const key = `${selectedPromptId}_${Date.now()}`;
-      setGenImages(p => ({ ...p, [activeType]: data.image_url }));
-      setHistory(h => [{ id:key, promptName:selectedPrompt.name, category, type:activeType, typeLabel:TYPE_LABELS[activeType], imageUrl:data.image_url, time:new Date().toLocaleTimeString("ar") }, ...h.slice(0,19)]);
-    } catch(e: any) { alert("خطأ: "+e.message); }
-    setGenLoading(false);
-  };
-
-  const iStyle: React.CSSProperties = { width:"100%", padding:"8px 10px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-primary)", fontSize:"12px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" as any };
-  const types = [{k:"white",l:"خلفية بيضاء"},{k:"env",l:"بيئة واقعية"},{k:"dim",l:"مقاسات"}];
-
-  return (
-    <div style={{ fontFamily:"'Tajawal',sans-serif", direction:"rtl", minHeight:"100vh", background:"var(--color-background-tertiary)", color:"var(--color-text-primary)" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
-      <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
-      <div style={{ display:"flex", minHeight:"100vh" }}>
-        {sidebarJSX}
-        <div style={{ flex:1, display:"grid", gridTemplateColumns:"250px 1fr", overflow:"hidden" }}>
-
-          {/* Left Panel */}
-          <div style={{ background:"var(--color-background-secondary)", borderLeft:"0.5px solid var(--color-border-tertiary)", padding:"18px", overflowY:"auto", display:"flex", flexDirection:"column", gap:"12px" }}>
-            <div>
-              <h2 style={{ fontSize:"15px", fontWeight:"700", margin:"0 0 3px" }}>✨ Content Studio</h2>
-              <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>توليد صور من مكتبة الـ Prompts</p>
-            </div>
-
-            {/* Image Upload */}
-            <div>
-              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>صورة المنتج</p>
-              {imagePreview ? (
-                <div style={{ position:"relative" }}>
-                  <img src={imagePreview} alt="" style={{ width:"100%", height:"130px", objectFit:"contain", background:"var(--color-background-primary)", borderRadius:"8px", border:"0.5px solid var(--color-border-tertiary)" }} />
-                  <button onClick={() => { setImagePreview(null); setImageBase64(null); }} style={{ position:"absolute", top:5, left:5, width:20, height:20, background:"#fdeaea", border:"0.5px solid #f8d0d0", borderRadius:"50%", color:"#e24b4a", cursor:"pointer", fontSize:"10px", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-                  <div style={{ position:"absolute", bottom:5, right:5, background:"rgba(0,0,0,0.5)", borderRadius:"4px", padding:"1px 5px" }}>
-                    <span style={{ fontSize:"9px", color:"#fff" }}>✅ 2MB</span>
-                  </div>
-                </div>
-              ) : (
-                <div onClick={() => fileRef.current?.click()} style={{ border:"1.5px dashed var(--color-border-secondary)", borderRadius:"8px", padding:"20px", textAlign:"center", cursor:"pointer", background:"var(--color-background-primary)" }}>
-                  <input ref={fileRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display:"none" }} />
-                  <div style={{ fontSize:"22px", marginBottom:"4px" }}>📷</div>
-                  <div style={{ fontSize:"11px", color:"var(--color-text-secondary)" }}>ارفع صورة المنتج</div>
-                  <div style={{ fontSize:"9px", color:"var(--color-text-tertiary)", marginTop:"3px" }}>يُضغط لـ 2MB + تُحذف النصوص</div>
-                </div>
-              )}
-            </div>
-
-            {/* URL */}
-            <div>
-              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 4px", fontWeight:"500" }}>أو رابط الصورة</p>
-              <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." style={{ ...iStyle, direction:"ltr", textAlign:"left" }} />
-            </div>
-
-            {/* Category */}
-            <div>
-              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 4px", fontWeight:"500" }}>فئة المنتج</p>
-              <select value={category} onChange={e => setCategory(e.target.value)} style={iStyle}>
-                {CATEGORIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-
-            {/* Output Type */}
-            <div>
-              <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>نوع المخرج</p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"4px" }}>
-                {types.map(t => (
-                  <button key={t.k} onClick={() => setActiveType(t.k)}
-                    style={{ padding:"6px 4px", fontSize:"10px", background:activeType===t.k?"#534AB7":"var(--color-background-primary)", border:`0.5px solid ${activeType===t.k?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"7px", color:activeType===t.k?"#EEEDFE":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit" }}>
-                    {t.k==="white"?"⬜":t.k==="env"?"🏠":"📐"} {t.l}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Prompt Dropdown */}
-            <div>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"4px" }}>
-                <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0, fontWeight:"500" }}>اختر Prompt</p>
-                <span style={{ fontSize:"9px", color:promptsForSelection.length > 0 ? "var(--color-text-success)" : "#E24B4A" }}>
-                  {promptsForSelection.length > 0 ? `${promptsForSelection.length} متاح` : "لا يوجد"}
-                </span>
-              </div>
-              {promptsForSelection.length > 0 ? (
-                <select value={selectedPromptId} onChange={e => setSelectedPromptId(e.target.value)} style={iStyle}>
-                  {promptsForSelection.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              ) : (
-                <div style={{ padding:"8px 10px", background:"#FCEBEB", border:"0.5px solid #F7C1C1", borderRadius:"8px", fontSize:"11px", color:"#A32D2D" }}>
-                  لا يوجد Prompt — أضفه في مكتبة الأوامر
-                </div>
-              )}
-            </div>
-
-            {/* Custom */}
-            <div style={{ background:"#fffbf0", border:"0.5px solid #f0e0b0", borderRadius:"8px", padding:"8px 10px" }}>
-              <p style={{ fontSize:"11px", color:"#a07010", margin:"0 0 4px", fontWeight:"600" }}>⚡ إضافة مخصصة</p>
-              <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} rows={2} placeholder="ultra realistic, 8K..." style={{ ...iStyle, resize:"none", fontSize:"11px", direction:"ltr", textAlign:"left" }} />
-            </div>
-
-            {/* Generate Button */}
-            <button onClick={generateImage} disabled={genLoading || !selectedPromptId || (!imageBase64 && !imageUrl)}
-              style={{ width:"100%", padding:"10px", background:genLoading||!selectedPromptId?"#e0e0f0":"linear-gradient(135deg,#7c3aed,#2563eb)", border:"none", borderRadius:"9px", color:genLoading||!selectedPromptId?"#9090c0":"#fff", fontSize:"13px", fontWeight:"700", cursor:genLoading||!selectedPromptId?"not-allowed":"pointer", fontFamily:"inherit" }}>
-              {genLoading ? "⏳ جاري التوليد..." : "🎨 ولّد الصورة"}
-            </button>
-          </div>
-
-          {/* Right: Output Area */}
-          <div style={{ padding:"20px", overflowY:"auto", background:"var(--color-background-tertiary)", display:"flex", flexDirection:"column", gap:"20px" }}>
-
-            {/* Output Cards */}
-            <div>
-              <p style={{ fontSize:"13px", fontWeight:"600", color:"var(--color-text-primary)", margin:"0 0 12px" }}>المخرجات</p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
-                {types.map(t => (
-                  <div key={t.k} style={{ background:"var(--color-background-primary)", border:`0.5px solid ${activeType===t.k && genLoading?"#7c3aed":"var(--color-border-tertiary)"}`, borderRadius:"12px", overflow:"hidden", cursor: genImages[t.k] ? "pointer" : "default" }} onClick={() => genImages[t.k] && setHistoryModal({ promptName:t.l, imageUrl:genImages[t.k] })}>
-                    <div style={{ height:"150px", background:"var(--color-background-secondary)", display:"flex", alignItems:"center", justifyContent:"center", position:"relative", overflow:"hidden" }}>
-                      {genImages[t.k] ? (
-                        <>
-                          <img src={genImages[t.k]} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-                          <div style={{ position:"absolute", top:6, right:6, background:"#1D9E75", color:"#fff", fontSize:"9px", padding:"2px 7px", borderRadius:"10px" }}>مكتمل</div>
-                        </>
-                      ) : activeType===t.k && genLoading ? (
-                        <div style={{ textAlign:"center" }}>
-                          <div style={{ width:24, height:24, border:"2px solid var(--color-border-secondary)", borderTopColor:"#7c3aed", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 6px" }} />
-                          <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>جاري التوليد...</p>
-                        </div>
-                      ) : (
-                        <div style={{ textAlign:"center", opacity:0.4 }}>
-                          <div style={{ fontSize:"24px", marginBottom:"4px" }}>{t.k==="white"?"⬜":t.k==="env"?"🏠":"📐"}</div>
-                          <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>لم يُولَّد بعد</p>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ padding:"8px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                      <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0 }}>{t.l}</p>
-                      {genImages[t.k] && (
-                        <a href={genImages[t.k]} download={`${t.k}_generated.jpg`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                          style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", color:"var(--color-text-secondary)", textDecoration:"none" }}>
-                          ⬇ تنزيل
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* History */}
-            {history.length > 0 && (
-              <div>
-                <p style={{ fontSize:"13px", fontWeight:"600", color:"var(--color-text-primary)", margin:"0 0 10px" }}>آخر المخرجات</p>
-                <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
-                  {history.slice(0,8).map(h => (
-                    <div key={h.id} style={{ background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-tertiary)", borderRadius:"9px", padding:"8px 12px", display:"flex", alignItems:"center", gap:"10px", cursor:"pointer" }} onClick={() => setHistoryModal(h)}>
-                      <img src={h.imageUrl} alt="" style={{ width:42, height:42, borderRadius:"6px", objectFit:"cover", border:"0.5px solid var(--color-border-tertiary)", flexShrink:0 }} />
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <p style={{ fontSize:"12px", fontWeight:"500", color:"var(--color-text-primary)", margin:"0 0 2px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.promptName}</p>
-                        <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>{h.category} — {h.typeLabel} — {h.time}</p>
-                      </div>
-                      <div style={{ display:"flex", gap:"5px", flexShrink:0 }}>
-                        <a href={h.imageUrl} download={`generated_${h.id}.jpg`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                          style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", color:"var(--color-text-secondary)", textDecoration:"none" }}>⬇</a>
-                        <button onClick={e => { e.stopPropagation(); setHistoryModal(h); }} style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", cursor:"pointer", color:"var(--color-text-secondary)", fontFamily:"inherit" }}>عرض</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!imageBase64 && !imageUrl && history.length === 0 && (
-              <div style={{ textAlign:"center", padding:"60px 0", color:"var(--color-text-tertiary)" }}>
-                <div style={{ fontSize:"44px", marginBottom:"12px", opacity:0.3 }}>🎨</div>
-                <p style={{ fontSize:"13px", margin:"0 0 4px" }}>ارفع صورة المنتج واختر الـ Prompt</p>
-                <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>يُحذف النص تلقائياً ويُولَّد من مكتبة الأوامر</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Image View Modal */}
-      {historyModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }} onClick={() => setHistoryModal(null)}>
-          <div style={{ background:"var(--color-background-primary)", borderRadius:"12px", padding:"16px", maxWidth:"600px", width:"90%", position:"relative" }} onClick={e => e.stopPropagation()}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
-              <p style={{ fontSize:"13px", fontWeight:"600", color:"var(--color-text-primary)", margin:0 }}>{historyModal.promptName}</p>
-              <div style={{ display:"flex", gap:"6px" }}>
-                <a href={historyModal.imageUrl} download="generated.jpg" target="_blank" rel="noopener noreferrer"
-                  style={{ padding:"5px 12px", background:"#534AB7", color:"#EEEDFE", borderRadius:"7px", fontSize:"11px", textDecoration:"none" }}>⬇ تنزيل</a>
-                <button onClick={() => setHistoryModal(null)} style={{ width:26, height:26, background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"50%", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:"12px", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-              </div>
-            </div>
-            <img src={historyModal.imageUrl} alt="" style={{ width:"100%", borderRadius:"8px", border:"0.5px solid var(--color-border-tertiary)" }} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

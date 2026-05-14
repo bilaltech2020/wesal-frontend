@@ -34,15 +34,15 @@ interface InventorySearch { id: string; sku: string; results: InventoryResult[];
 interface CompRow { id: string; sku: string; query: string; status: "idle"|"searching"|"done"|"error"; results: CompResult[]; }
 interface CompResult { competitor: string; title: string|null; price: number|null; currency: string; link: string|null; available: boolean|null; error: string|null; }
 
-type ViewType = "login" | "dashboard" | "competitors" | "inventory" | "reports" | "content" | "library" | "users" | "ai-import";
+type ViewType = "login" | "dashboard" | "competitors" | "inventory" | "reports" | "content" | "library" | "users";
 
 // ── Roles & Permissions ──────────────────────────────
 type UserRole = "admin"|"manager"|"operations"|"sales"|"viewer";
 interface WesalUser{id:string;name:string;email:string;role:UserRole;createdAt:string;active:boolean;}
 const ROLE_LABELS:Record<UserRole,string>={admin:"مدير النظام",manager:"مدير",operations:"عمليات",sales:"مبيعات",viewer:"مشاهدة فقط"};
 const ROLE_PERMISSIONS:Record<UserRole,string[]>={
-  admin:["dashboard","reports","competitors","inventory","content","library","users","ai-import"],
-  manager:["dashboard","reports","competitors","inventory","content","library","ai-import"],
+  admin:["dashboard","reports","competitors","inventory","content","library","users"],
+  manager:["dashboard","reports","competitors","inventory","content","library"],
   operations:["dashboard","reports","inventory"],
   sales:["dashboard","competitors"],
   viewer:["dashboard"],
@@ -60,7 +60,6 @@ const NAV = [
   {icon:"✨", label:"Content Studio",  v:"content",     perm:"content"},
   {icon:"📚", label:"مكتبة الأوامر",  v:"library",     perm:"library"},
   {icon:"👥", label:"المستخدمون",      v:"users",       perm:"users"},
-  {icon:"🤖", label:"إدخال المنتجات AI", v:"ai-import",   perm:"ai-import"},
 ];
 
 const inputStyle: React.CSSProperties = {
@@ -103,7 +102,17 @@ export default function Home() {
     const token = localStorage.getItem("wesal_token");
     const savedUser = localStorage.getItem("wesal_user");
     if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
+      const u = JSON.parse(savedUser);
+      setUser(u);
+      // Restore currentUser from saved users
+      try {
+        const savedUsers = localStorage.getItem("wesal_users");
+        const parsedUsers: WesalUser[] = savedUsers ? JSON.parse(savedUsers) : [];
+        const matchedUser = parsedUsers.find((wu: WesalUser) => wu.email === u.email && wu.active);
+        setCurrentUser(matchedUser || {id:"s1", name:u.email.split("@")[0], email:u.email, role:"admin" as UserRole, createdAt:new Date().toISOString(), active:true});
+      } catch {
+        setCurrentUser({id:"s1", name:u.email?.split("@")[0]||"م", email:u.email||"", role:"admin" as UserRole, createdAt:new Date().toISOString(), active:true});
+      }
       setView("dashboard");
     }
   }, []);
@@ -293,7 +302,17 @@ export default function Home() {
       const u = { email, company: email.split("@")[0] };
       localStorage.setItem("wesal_token", data.token);
       localStorage.setItem("wesal_user", JSON.stringify(u));
-      setUser(u); const mu=users.find(wu=>wu.email===email&&wu.active); setCurrentUser(mu||{id:"s1",name:email.split("@")[0],email,role:"admin",createdAt:new Date().toISOString(),active:true}); setView("dashboard");
+      setUser(u);
+      // Load users fresh from localStorage to avoid stale state
+      try {
+        const savedUsers = localStorage.getItem("wesal_users");
+        const parsedUsers: WesalUser[] = savedUsers ? JSON.parse(savedUsers) : [];
+        const matchedUser = parsedUsers.find((wu: WesalUser) => wu.email === email && wu.active);
+        setCurrentUser(matchedUser || {id:"s1", name:email.split("@")[0], email, role:"admin" as UserRole, createdAt:new Date().toISOString(), active:true});
+      } catch {
+        setCurrentUser({id:"s1", name:email.split("@")[0], email, role:"admin" as UserRole, createdAt:new Date().toISOString(), active:true});
+      }
+      setView("dashboard");
     } catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "حدث خطأ"); }
     finally { setAuthLoading(false); }
   };
@@ -307,7 +326,17 @@ export default function Home() {
       const u = { email, company: companyName };
       localStorage.setItem("wesal_token", data.token);
       localStorage.setItem("wesal_user", JSON.stringify(u));
-      setUser(u); const mu=users.find(wu=>wu.email===email&&wu.active); setCurrentUser(mu||{id:"s1",name:email.split("@")[0],email,role:"admin",createdAt:new Date().toISOString(),active:true}); setView("dashboard");
+      setUser(u);
+      // Load users fresh from localStorage to avoid stale state
+      try {
+        const savedUsers = localStorage.getItem("wesal_users");
+        const parsedUsers: WesalUser[] = savedUsers ? JSON.parse(savedUsers) : [];
+        const matchedUser = parsedUsers.find((wu: WesalUser) => wu.email === email && wu.active);
+        setCurrentUser(matchedUser || {id:"s1", name:email.split("@")[0], email, role:"admin" as UserRole, createdAt:new Date().toISOString(), active:true});
+      } catch {
+        setCurrentUser({id:"s1", name:email.split("@")[0], email, role:"admin" as UserRole, createdAt:new Date().toISOString(), active:true});
+      }
+      setView("dashboard");
     } catch (e: unknown) { setAuthError(e instanceof Error ? e.message : "حدث خطأ"); }
     finally { setAuthLoading(false); }
   };
@@ -1214,10 +1243,6 @@ export default function Home() {
   // ══════════════════════════════════════
   // CONTENT STUDIO VIEW
   // ══════════════════════════════════════
-  if (view === "ai-import" && canAccess("ai-import")) {
-    return <AIProductImport sidebarJSX={sidebarJSX} />;
-  }
-
   if (view === "content" && canAccess("content")) {
     return <ContentStudioView sidebarJSX={sidebarJSX} />;
   }

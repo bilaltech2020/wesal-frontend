@@ -6,8 +6,7 @@ import dynamic from "next/dynamic";
 // ── Lazy load heavy views ─────────────────────────────
 const ReportsView       = dynamic(() => import("./components/ReportsView"),       { ssr: false });
 const ContentStudioView = dynamic(() => import("./components/ContentStudioView"), { ssr: false });
-const PromptLibraryView  = dynamic(() => import("./components/PromptLibraryView"),  { ssr: false });
-const AIProductImport   = dynamic(() => import("./components/AIProductImport"),    { ssr: false });
+const PromptLibraryView = dynamic(() => import("./components/PromptLibraryView"), { ssr: false });
 
 function loadXLSX(): Promise<void> {
   return new Promise((resolve) => {

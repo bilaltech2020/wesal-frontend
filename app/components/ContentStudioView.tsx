@@ -7,9 +7,9 @@ const API_URL = "https://wesal-backend-production.up.railway.app";
 // ══════════════════════════════════════
 // GEMINI SERVICE (inline)
 // ══════════════════════════════════════
-const GEMINI_FLASH = "gemini-1.5-flash-latest";
-const GEMINI_PRO   = "gemini-1.5-pro-latest";
-const GEMINI_BASE  = "https://generativelanguage.googleapis.com/v1beta/models";
+const GEMINI_FLASH = "gemini-1.5-flash-001";
+const GEMINI_PRO   = "gemini-1.5-pro-001";
+const GEMINI_BASE  = "https://generativelanguage.googleapis.com/v1/models";
 
 const FURNITURE_SYSTEM = `أنت خبير تحليل منتجات أثاث وديكور للسوق السعودي.
 قواعد: 1) أثاث وديكور فقط. 2) لا تخترع مقاسات. 3) خامة غير واضحة = "Needs Review".

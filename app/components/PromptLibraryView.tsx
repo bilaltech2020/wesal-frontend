@@ -39,22 +39,7 @@ const TYPE_COLORS: Record<string,{bg:string,text:string}> = {
 };
 const TYPE_LABELS: Record<string,string> = { white:"خلفية بيضاء", env:"بيئة واقعية", dim:"مقاسات" };
 
-// ── Category Tree (متزامن مع ContentStudio) ───────────────────
-const CATEGORY_TREE: Record<string,string[]> = {
-  "كنبة / أريكة":    ["عامة","كنبة L","كنبة زاوية","كنبة كلاسيك","كنبة مودرن","كنبة قابلة للتحويل","أريكة فردية","أريكة ثنائية","أريكة ثلاثية"],
-  "طاولة":           ["عامة","طاولة طعام","طاولة قهوة","طاولة جانبية","طاولة تلفاز","طاولة مكتب","طاولة زجاجية","طاولة خشبية"],
-  "إضاءة":           ["عامة","لمبة أرضية","لمبة طاولة","ثريا","إضاءة جدارية","إضاءة سقف","إضاءة خارجية"],
-  "كرسي":            ["عامة","كرسي مكتب","كرسي طعام","كرسي استرخاء","كرسي بذراعين","كرسي بدون ذراعين","بوف","فوتيه"],
-  "سرير":            ["عامة","سرير مفرد","سرير مزدوج","سرير كينج","سرير بقاعدة تخزين","سرير ديوان","سرير أطفال"],
-  "خزانة / وحدة TV": ["عامة","خزانة ملابس","وحدة تلفاز","خزانة مطبخ","خزانة حمام","وحدة جدارية","رف كتب"],
-  "أثاث خارجي":      ["عامة","طاولة خارجية","كراسي خارجية","كنبة خارجية","أرجوحة","شمسية"],
-  "مطبخ":            ["عامة","خزانة مطبخ","رف مطبخ","جزيرة مطبخ","طاولة بار","كرسي بار"],
-  "حمام":            ["عامة","خزانة حمام","مرآة","رف حمام","وحدة حمام كاملة"],
-  "ديكور":           ["عامة","لوحة جدارية","مرآة ديكورية","نباتات صناعية","سجادة","وسادة","شمعدان"],
-  "أثاث مكتبي":      ["عامة","مكتب","كرسي مكتب","رف مكتبي","خزانة ملفات","طاولة اجتماعات"],
-  "أخرى":            ["عامة"],
-};
-const ALL_CATEGORIES = Object.keys(CATEGORY_TREE);
+const ALL_CATEGORIES = ["كنبة / أريكة","طاولة","إضاءة","كرسي","سرير","خزانة","ديكور","أخرى"];
 
 // ══════════════════════════════════════════════════════════════
 // PROMPT LIBRARY VIEW — جدول + modal إضافة/تعديل
@@ -71,8 +56,6 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
   const [modal, setModal]         = useState<"add"|"edit"|null>(null);
   const [editItem, setEditItem]   = useState<any>(null);
   const [charCount, setCharCount] = useState(0);
-  const [newCatMode, setNewCatMode] = useState(false);
-  const [newCatName, setNewCatName] = useState("");
   const PER_PAGE = 10;
 
   const saveLib = (items: any[]) => { setLibrary(items); try { localStorage.setItem("wesal_prompt_library", JSON.stringify(items)); } catch {} };
@@ -87,25 +70,19 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
   const paged = filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
 
   const openAdd = () => {
-    setEditItem({ id:"", name:"", category:"كنبة / أريكة", subCategory:"عامة", type:"white", typeLabel:"خلفية بيضاء", tags:"", prompt:"" });
+    setEditItem({ id:"", name:"", category:"كنبة / أريكة", type:"white", typeLabel:"خلفية بيضاء", tags:"", prompt:"" });
     setCharCount(0);
-    setNewCatMode(false);
-    setNewCatName("");
     setModal("add");
   };
   const openEdit = (p: any) => { setEditItem({...p}); setCharCount(p.prompt.length); setModal("edit"); };
 
   const saveItem = () => {
     if (!editItem.name.trim() || !editItem.prompt.trim()) return alert("الاسم والـ Prompt مطلوبان");
-    // إذا فئة جديدة — استخدمها
-    const finalCat = newCatMode && newCatName.trim() ? newCatName.trim() : editItem.category;
-    const finalItem = { ...editItem, category: finalCat, typeLabel: TYPE_LABELS[editItem.type]||editItem.type };
     if (modal === "add") {
-      saveLib([...library, { ...finalItem, id:`custom_${Date.now()}` }]);
+      saveLib([...library, { ...editItem, id:`custom_${Date.now()}`, typeLabel: TYPE_LABELS[editItem.type]||editItem.type }]);
     } else {
-      saveLib(library.map(p => p.id === editItem.id ? finalItem : p));
+      saveLib(library.map(p => p.id === editItem.id ? { ...editItem, typeLabel: TYPE_LABELS[editItem.type]||editItem.type } : p));
     }
-    setNewCatMode(false); setNewCatName("");
     setModal(null);
   };
 
@@ -134,7 +111,7 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="🔍 بحث بالاسم أو الـ Prompt أو الوسوم..." style={{ ...iStyle, width:"220px" }} />
             <select value={filterCat} onChange={e => { setFilterCat(e.target.value); setPage(1); }} style={{ ...iStyle, width:"150px" }}>
               <option value="الكل">كل الفئات</option>
-              {[...new Set([...ALL_CATEGORIES, ...library.map(p => p.category)])].map(c => <option key={c} value={c}>{c}</option>)}
+              {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <div style={{ display:"flex", gap:"5px" }}>
               {(["الكل","white","env","dim"] as string[]).map(t => (
@@ -244,21 +221,10 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
               {/* Category + Type */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
                 <div>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"5px" }}>
-                    <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0, fontWeight:"500" }}>الفئة <span style={{ color:"#E24B4A" }}>*</span></p>
-                    <button onClick={() => { setNewCatMode(m => !m); setNewCatName(""); }}
-                      style={{ fontSize:"9px", padding:"2px 7px", background:newCatMode?"#534AB7":"var(--color-background-secondary)", border:`0.5px solid ${newCatMode?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"5px", color:newCatMode?"#fff":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit" }}>
-                      {newCatMode ? "✕ إلغاء" : "+ فئة جديدة"}
-                    </button>
-                  </div>
-                  {newCatMode ? (
-                    <input value={newCatName} onChange={e => setNewCatName(e.target.value)}
-                      placeholder="اسم الفئة الجديدة..." style={{ ...iStyle, borderColor:"#534AB7" }} />
-                  ) : (
-                    <select value={editItem.category} onChange={e => setEditItem({...editItem, category:e.target.value, subCategory:"عامة"})} style={iStyle}>
-                      {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  )}
+                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>الفئة <span style={{ color:"#E24B4A" }}>*</span></p>
+                  <select value={editItem.category} onChange={e => setEditItem({...editItem, category:e.target.value})} style={iStyle}>
+                    {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
                 <div>
                   <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>نوع المخرج <span style={{ color:"#E24B4A" }}>*</span></p>
@@ -267,21 +233,6 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
                   </select>
                 </div>
               </div>
-
-              {/* Sub Category */}
-              {!newCatMode && CATEGORY_TREE[editItem.category]?.length > 1 && (
-                <div>
-                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>التصنيف الفرعي</p>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:"5px" }}>
-                    {CATEGORY_TREE[editItem.category].map(sub => (
-                      <button key={sub} onClick={() => setEditItem({...editItem, subCategory:sub})}
-                        style={{ padding:"4px 10px", fontSize:"10px", background:(editItem.subCategory||"عامة")===sub?"#534AB7":"var(--color-background-secondary)", border:`0.5px solid ${(editItem.subCategory||"عامة")===sub?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"20px", color:(editItem.subCategory||"عامة")===sub?"#fff":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
-                        {sub}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Badge Preview */}
               <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
@@ -332,4 +283,9 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
       )}
     </div>
   );
+}
+
+// ══════════════════════════════════════════════════════════════
+// CONTENT STUDIO VIEW — Dropdown + Output Grid + History
+// ══════════════════════════════════════════════════════════════
 }

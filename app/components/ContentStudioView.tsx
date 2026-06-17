@@ -413,76 +413,7 @@ export default function ContentStudioView({ sidebarJSX }) {
               </div>
             )}
 
-            {/* Output Cards */}
-            <div>
-              <p style={{ fontSize:"13px", fontWeight:"600", margin:"0 0 12px" }}>المخرجات</p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
-                {types.map(t => (
-                  <div key={t.k} style={{ background:"var(--color-background-primary)", border:`0.5px solid ${activeType===t.k&&genLoading?"#7c3aed":"var(--color-border-tertiary)"}`, borderRadius:"12px", overflow:"hidden", cursor:genImages[t.k]?"pointer":"default" }} onClick={() => genImages[t.k] && setHistoryModal({ promptName:t.l, imageUrl:genImages[t.k] })}>
-                    <div style={{ height:"150px", background:"var(--color-background-secondary)", display:"flex", alignItems:"center", justifyContent:"center", position:"relative", overflow:"hidden" }}>
-                      {genImages[t.k] ? (
-                        <><img src={genImages[t.k]} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-                        <div style={{ position:"absolute", top:6, right:6, background:"#1D9E75", color:"#fff", fontSize:"9px", padding:"2px 7px", borderRadius:"10px" }}>مكتمل</div></>
-                      ) : activeType===t.k && genLoading ? (
-                        <div style={{ textAlign:"center" }}>
-                          <div style={{ width:24, height:24, border:"2px solid var(--color-border-secondary)", borderTopColor:"#7c3aed", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 6px" }} />
-                          <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>جاري التوليد...</p>
-                        </div>
-                      ) : (
-                        <div style={{ textAlign:"center", opacity:0.4 }}>
-                          <div style={{ fontSize:"24px", marginBottom:"4px" }}>{t.k==="white"?"⬜":t.k==="env"?"🏠":"📐"}</div>
-                          <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:0 }}>لم يُولَّد بعد</p>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ padding:"8px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                      <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0 }}>{t.l}</p>
-                      {genImages[t.k] && (
-                        <a href={genImages[t.k]} download={`${t.k}_generated.jpg`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                          style={{ fontSize:"10px", padding:"3px 8px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"5px", color:"var(--color-text-secondary)", textDecoration:"none" }}>⬇ تنزيل</a>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            {/* ── Refine Panel ── */}
-            {Object.keys(genImages).length > 0 && (
-              <div style={{ background:"var(--color-background-primary)", border:"0.5px solid #7c3aed", borderRadius:"12px", padding:"14px" }}>
-                <p style={{ fontSize:"13px", fontWeight:"700", color:"#7c3aed", margin:"0 0 10px" }}>✨ تحسين الصورة المولّدة</p>
-
-                {/* Quick Presets */}
-                <div style={{ display:"flex", flexWrap:"wrap", gap:"5px", marginBottom:"10px" }}>
-                  {REFINEMENT_PRESETS.map(p => (
-                    <button key={p.label} onClick={() => setRefinePrompt(p.prompt)}
-                      style={{ padding:"4px 10px", fontSize:"10px", background:refinePrompt===p.prompt?"#ede9fe":"var(--color-background-secondary)", border:`0.5px solid ${refinePrompt===p.prompt?"#7c3aed":"var(--color-border-secondary)"}`, borderRadius:"20px", color:refinePrompt===p.prompt?"#7c3aed":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Custom Refine Input */}
-                <div style={{ display:"flex", gap:"6px", marginBottom:"8px" }}>
-                  <input value={refinePrompt} onChange={e => setRefinePrompt(e.target.value)}
-                    placeholder="اكتب أمر التحسين بالإنجليزي..."
-                    style={{ ...iStyle, flex:1, direction:"ltr", textAlign:"left", fontSize:"11px" }}
-                    onKeyDown={e => { if(e.key==="Enter" && genImages[activeType]) refineImage(activeType, genImages[activeType]); }}
-                  />
-                </div>
-
-                {/* Refine Buttons per type */}
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"5px" }}>
-                  {Object.entries(genImages).map(([type, imgUrl]) => (
-                    <button key={type} onClick={() => refineImage(type, imgUrl)}
-                      disabled={refineLoading && refineTarget?.type===type || !refinePrompt.trim()}
-                      style={{ padding:"6px 4px", fontSize:"10px", background:refineLoading&&refineTarget?.type===type?"#ede9fe":"linear-gradient(135deg,#7c3aed,#6d28d9)", border:"none", borderRadius:"7px", color:refineLoading&&refineTarget?.type===type?"#7c3aed":"#fff", cursor:!refinePrompt.trim()?"not-allowed":"pointer", fontFamily:"inherit", opacity:!refinePrompt.trim()?0.5:1 }}>
-                      {refineLoading && refineTarget?.type===type ? "⏳..." : `✨ ${TYPE_LABELS[type]}`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             {history.length > 0 && (
               <div>
                 <p style={{ fontSize:"13px", fontWeight:"600", margin:"0 0 10px" }}>آخر المخرجات</p>

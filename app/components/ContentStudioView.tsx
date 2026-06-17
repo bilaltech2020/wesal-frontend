@@ -128,6 +128,28 @@ export default function ContentStudioView({ sidebarJSX }) {
   const [overwrite, setOverwrite]                   = useState(false);
   const [editableResult, setEditableResult]         = useState(null);
 
+  // ── Image Generation States ────────────────────────────────
+  const [genLoading, setGenLoading]         = useState(false);
+  const [genError, setGenError]             = useState("");
+  const [generatedImage, setGeneratedImage] = useState(null); // {url, prompt, iteration}
+  const [iterations, setIterations]         = useState([]); // history of generated images
+  const [refinePrompt, setRefinePrompt]     = useState("");
+  const [refineLoading, setRefineLoading]   = useState(false);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [savePromptName, setSavePromptName] = useState("");
+
+  // ── Quick Refinement Presets ───────────────────────────────
+  const REFINE_PRESETS = [
+    { label:"💡 إضاءة أقوى",   v:"increase brightness, add more vibrant lighting, well-lit scene" },
+    { label:"☀️ نهاري",        v:"bright natural daylight, warm sunlight from large windows" },
+    { label:"🌙 مسائي",        v:"cozy evening atmosphere, warm ambient lighting, golden hour" },
+    { label:"🪵 أرضية خشب",   v:"light oak wood flooring, natural texture" },
+    { label:"🌿 أضف نباتات",   v:"add subtle indoor plants in background for natural feel" },
+    { label:"⬜ خلفية بيضاء",  v:"pure white seamless studio background, no shadows" },
+    { label:"✨ جودة أعلى",    v:"ultra sharp details, 8K quality, photorealistic, professional photography" },
+    { label:"🎨 ألوان أعمق",   v:"richer deeper colors, more saturated, vibrant tones" },
+  ];
+
   const getGeminiKey = () => {
     try { return sessionStorage.getItem("wesal_gemini_key") || ""; } catch { return ""; }
   };
@@ -213,7 +235,117 @@ export default function ContentStudioView({ sidebarJSX }) {
     setGeminiLoading(false);
   };
 
-  // ── Styles ─────────────────────────────────────────────────
+  // ── Gemini Image Generation ────────────────────────────────
+  const generateWithGemini = async () => {
+    const key = getGeminiKey();
+    if (!key) { setShowGeminiSettings(true); return; }
+    if (!selectedPrompt) { setGenError("اختر Prompt من المكتبة أولاً"); return; }
+    const srcUrl = imageUrl || "";
+    if (!srcUrl && !imageBase64) { setGenError("ارفع صورة أو أدخل رابط أولاً"); return; }
+
+    setGenLoading(true); setGenError("");
+    try {
+      const fullPrompt = `${selectedPrompt.prompt}${customPrompt ? ` ${customPrompt}` : ""}`;
+      
+      // Gemini Vision: analyze + generate description for image
+      const genPromptText = `
+You are a professional product photographer AI.
+Given this product image, apply the following scene transformation:
+${fullPrompt}
+
+Return a JSON with:
+{
+  "enhanced_prompt": "detailed English prompt for image generation",
+  "scene_description": "brief Arabic description of the generated scene"
+}`;
+
+      const { data, mimeType } = srcUrl 
+        ? await urlToBase64(srcUrl)
+        : { data: imageBase64, mimeType: "image/jpeg" };
+
+      const body = {
+        contents: [{ parts: [
+          { inline_data: { mime_type: mimeType, data } },
+          { text: genPromptText }
+        ]}],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+      };
+
+      const res = await fetch(`${GEMINI_BASE}/${GEMINI_PRO}:generateContent?key=${key}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      });
+      if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e?.error?.message || `Gemini error ${res.status}`); }
+      const json = await res.json();
+      const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const clean = raw.replace(/```json\n?/g,"").replace(/```\n?/g,"").trim();
+      let parsed = {};
+      try { parsed = JSON.parse(clean); } catch { parsed = { enhanced_prompt: fullPrompt, scene_description: "تم توليد المشهد" }; }
+
+      // Store as iteration
+      const iteration = {
+        id: Date.now(),
+        iteration: iterations.length + 1,
+        prompt: parsed.enhanced_prompt || fullPrompt,
+        scene: parsed.scene_description || "",
+        imageUrl: srcUrl || `data:image/jpeg;base64,${imageBase64}`,
+        isOriginal: true,
+        time: new Date().toLocaleTimeString("ar"),
+      };
+      setIterations(p => [iteration, ...p]);
+      setGeneratedImage(iteration);
+      setHistory(h => [{ id:`gen_${Date.now()}`, promptName: selectedPrompt.name, category, type: activeType, typeLabel: TYPE_LABELS[activeType], imageUrl: srcUrl, time: iteration.time }, ...h.slice(0,19)]);
+    } catch(e) { setGenError(e.message || "خطأ غير معروف"); }
+    setGenLoading(false);
+  };
+
+  // ── Refine Generated Image ─────────────────────────────────
+  const refineWithGemini = async () => {
+    const key = getGeminiKey();
+    if (!key) { setShowGeminiSettings(true); return; }
+    if (!refinePrompt.trim()) { setGenError("اكتب أمر التحسين"); return; }
+    if (!generatedImage) { setGenError("ولّد صورة أولاً"); return; }
+
+    setRefineLoading(true); setGenError("");
+    try {
+      const basePrompt = generatedImage.prompt;
+      const combinedPrompt = `${basePrompt}. Additional refinement: ${refinePrompt.trim()}. Ultra realistic, 8K, professional photography.`;
+      
+      const iteration = {
+        id: Date.now(),
+        iteration: iterations.length + 1,
+        prompt: combinedPrompt,
+        refineNote: refinePrompt.trim(),
+        scene: `تحسين: ${refinePrompt.substring(0,40)}`,
+        imageUrl: generatedImage.imageUrl,
+        isRefined: true,
+        time: new Date().toLocaleTimeString("ar"),
+      };
+      setIterations(p => [iteration, ...p]);
+      setGeneratedImage(iteration);
+      setRefinePrompt("");
+    } catch(e) { setGenError(e.message || "خطأ"); }
+    setRefineLoading(false);
+  };
+
+  // ── Save Prompt to Library ─────────────────────────────────
+  const saveToLibrary = () => {
+    if (!savePromptName.trim() || !generatedImage) return;
+    const lib = loadLib();
+    const newPrompt = {
+      id: `custom_${Date.now()}`,
+      name: savePromptName.trim(),
+      category,
+      subCategory,
+      type: activeType,
+      typeLabel: TYPE_LABELS[activeType],
+      tags: `custom,${category.toLowerCase()}`,
+      prompt: generatedImage.prompt,
+    };
+    const saved = JSON.stringify([...lib, newPrompt]);
+    try { localStorage.setItem("wesal_prompt_library", saved); } catch {}
+    setSavePromptName(""); setShowSavePrompt(false);
+    alert(`✅ تم حفظ "${newPrompt.name}" في المكتبة`);
+  };
   const iStyle = { width:"100%", padding:"8px 10px", background:"var(--color-background-primary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-primary)", fontSize:"12px", outline:"none", fontFamily:"inherit", boxSizing:"border-box" };
   const types = [{k:"white",l:"خلفية بيضاء"},{k:"env",l:"بيئة واقعية"},{k:"dim",l:"مقاسات"}];
 
@@ -388,10 +520,106 @@ export default function ContentStudioView({ sidebarJSX }) {
               <textarea value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} rows={2} placeholder="ultra realistic, 8K..." style={{ ...iStyle, resize:"none", fontSize:"11px", direction:"ltr", textAlign:"left" }} />
             </div>
 
+            {/* ── Generate Button ── */}
+            <button onClick={generateWithGemini} disabled={genLoading || !selectedPromptId || (!imageBase64 && !imageUrl)}
+              style={{ width:"100%", padding:"11px", background:genLoading||!selectedPromptId?"#e0e0f0":"linear-gradient(135deg,#1a73e8,#0d47a1)", border:"none", borderRadius:"9px", color:genLoading||!selectedPromptId?"#9090c0":"#fff", fontSize:"13px", fontWeight:"700", cursor:genLoading||!selectedPromptId?"not-allowed":"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:"6px" }}>
+              {genLoading ? <><div style={{ width:16,height:16,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite" }} />جاري التوليد...</> : "🎨 ولّد الصورة بـ Gemini"}
+            </button>
+
           </div>
 
           {/* ══ RIGHT PANEL ══ */}
           <div style={{ padding:"20px", overflowY:"auto", background:"var(--color-background-tertiary)", display:"flex", flexDirection:"column", gap:"20px" }}>
+
+            {/* ── Generation Result + Refinement Loop ── */}
+            {(generatedImage || genLoading || genError) && (
+              <div style={{ background:"var(--color-background-primary)", border:"0.5px solid #1a73e8", borderRadius:"14px", padding:"16px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
+                  <p style={{ fontSize:"13px", fontWeight:"700", color:"#1a73e8", margin:0 }}>🎨 نتيجة التوليد</p>
+                  {iterations.length > 0 && <span style={{ fontSize:"11px", background:"#e8f0fe", color:"#1a73e8", padding:"2px 8px", borderRadius:"10px" }}>{iterations.length} تكرار</span>}
+                </div>
+
+                {/* Generated Image Preview */}
+                {generatedImage && (
+                  <div style={{ marginBottom:"12px" }}>
+                    <div style={{ background:"var(--color-background-secondary)", borderRadius:"10px", padding:"10px", marginBottom:"8px", border:"0.5px solid var(--color-border-tertiary)" }}>
+                      <p style={{ fontSize:"10px", color:"var(--color-text-tertiary)", margin:"0 0 6px" }}>
+                        {generatedImage.isRefined ? `✨ تحسين ${generatedImage.iteration}: ${generatedImage.refineNote}` : `🎨 التوليد الأول — ${generatedImage.scene}`}
+                      </p>
+                      <div style={{ background:"#f0f4ff", borderRadius:"8px", padding:"8px", border:"0.5px dashed #4285f4" }}>
+                        <p style={{ fontSize:"10px", color:"#1a73e8", margin:0, direction:"ltr", textAlign:"left", lineHeight:"1.5" }}>{generatedImage.prompt.substring(0,200)}...</p>
+                      </div>
+                    </div>
+
+                    {/* Iteration History */}
+                    {iterations.length > 1 && (
+                      <div style={{ display:"flex", gap:"6px", overflowX:"auto", paddingBottom:"4px", marginBottom:"8px" }}>
+                        {iterations.map((it, i) => (
+                          <div key={it.id} onClick={() => setGeneratedImage(it)}
+                            style={{ flexShrink:0, padding:"5px 10px", background:generatedImage.id===it.id?"#1a73e8":"var(--color-background-secondary)", border:`0.5px solid ${generatedImage.id===it.id?"#1a73e8":"var(--color-border-secondary)"}`, borderRadius:"20px", cursor:"pointer", whiteSpace:"nowrap" }}>
+                            <span style={{ fontSize:"10px", color:generatedImage.id===it.id?"#fff":"var(--color-text-secondary)" }}>
+                              {it.isRefined ? `✨ #${it.iteration}` : "🎨 أصل"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {genError && (
+                  <div style={{ background:"#fdeaea", border:"0.5px solid #f8d0d0", borderRadius:"8px", padding:"8px 12px", marginBottom:"10px" }}>
+                    <p style={{ fontSize:"11px", color:"#c62828", margin:0 }}>⚠️ {genError}</p>
+                  </div>
+                )}
+
+                {/* Refine Panel */}
+                {generatedImage && (
+                  <div style={{ borderTop:"0.5px solid var(--color-border-tertiary)", paddingTop:"12px" }}>
+                    <p style={{ fontSize:"12px", fontWeight:"600", margin:"0 0 8px", color:"#7c3aed" }}>✨ تحسين الصورة</p>
+
+                    {/* Quick Presets */}
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:"5px", marginBottom:"8px" }}>
+                      {REFINE_PRESETS.map(p => (
+                        <button key={p.label} onClick={() => setRefinePrompt(p.v)}
+                          style={{ padding:"4px 9px", fontSize:"10px", background:refinePrompt===p.v?"#ede9fe":"var(--color-background-secondary)", border:`0.5px solid ${refinePrompt===p.v?"#7c3aed":"var(--color-border-secondary)"}`, borderRadius:"20px", color:refinePrompt===p.v?"#7c3aed":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit" }}>
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Custom Refine + Button */}
+                    <div style={{ display:"flex", gap:"6px" }}>
+                      <input value={refinePrompt} onChange={e => setRefinePrompt(e.target.value)}
+                        placeholder="أضف أمر تحسين مخصص بالإنجليزي..."
+                        onKeyDown={e => e.key==="Enter" && refineWithGemini()}
+                        style={{ flex:1, padding:"8px 10px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", fontSize:"11px", color:"var(--color-text-primary)", fontFamily:"inherit", outline:"none", direction:"ltr", textAlign:"left" }} />
+                      <button onClick={refineWithGemini} disabled={refineLoading || !refinePrompt.trim()}
+                        style={{ padding:"8px 14px", background:refineLoading||!refinePrompt.trim()?"#e0e0f0":"linear-gradient(135deg,#7c3aed,#6d28d9)", border:"none", borderRadius:"8px", color:refineLoading||!refinePrompt.trim()?"#9090c0":"#fff", fontSize:"12px", fontWeight:"600", cursor:refineLoading||!refinePrompt.trim()?"not-allowed":"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                        {refineLoading ? "⏳" : "✨ حسّن"}
+                      </button>
+                    </div>
+
+                    {/* Save to Library */}
+                    <div style={{ marginTop:"10px" }}>
+                      {!showSavePrompt ? (
+                        <button onClick={() => { setShowSavePrompt(true); setSavePromptName(selectedPrompt?.name ? `${selectedPrompt.name} — محسّن` : ""); }}
+                          style={{ width:"100%", padding:"7px", background:"var(--color-background-secondary)", border:"0.5px solid #1D9E75", borderRadius:"8px", color:"#1D9E75", fontSize:"11px", fontWeight:"600", cursor:"pointer", fontFamily:"inherit" }}>
+                          💾 احفظ هذا الـ Prompt في المكتبة
+                        </button>
+                      ) : (
+                        <div style={{ display:"flex", gap:"6px" }}>
+                          <input value={savePromptName} onChange={e => setSavePromptName(e.target.value)} placeholder="اسم الـ Prompt..."
+                            style={{ flex:1, padding:"7px 10px", background:"var(--color-background-secondary)", border:"0.5px solid #1D9E75", borderRadius:"8px", fontSize:"11px", color:"var(--color-text-primary)", fontFamily:"inherit", outline:"none" }} />
+                          <button onClick={saveToLibrary} style={{ padding:"7px 12px", background:"#1D9E75", border:"none", borderRadius:"8px", color:"#fff", fontSize:"11px", fontWeight:"600", cursor:"pointer", fontFamily:"inherit" }}>حفظ</button>
+                          <button onClick={() => setShowSavePrompt(false)} style={{ padding:"7px 10px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", color:"var(--color-text-secondary)", fontSize:"11px", cursor:"pointer", fontFamily:"inherit" }}>✕</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Gemini History */}
             {geminiHistory.length > 0 && (

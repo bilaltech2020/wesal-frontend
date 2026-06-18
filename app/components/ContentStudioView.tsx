@@ -133,7 +133,7 @@ export default function ContentStudioView({ sidebarJSX }: { sidebarJSX: React.Re
     const custom = customPrompt.trim() ? ` ${customPrompt.trim()}` : "";
     const fullPrompt = `${removeText}${selectedPrompt.prompt}${custom}`;
     try {
-      const res = await fetch(`${API_URL}/content-studio/generate-image`, {
+      const res = await fetch(`${API_URL}/content-studio/generate`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ prompt:fullPrompt, image_base64:imageBase64||"", image_url:imageUrl, mode:activeType, width:1024, height:1024 })
       });

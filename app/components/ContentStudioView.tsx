@@ -242,7 +242,7 @@ export default function ContentStudioView({ sidebarJSX }) {
 
     setGenLoading(true); setGenError("");
     try {
-      const fullPrompt = `${selectedPrompt.prompt}${customPrompt ? ` ${customPrompt}` : ""}`;
+      const fullPrompt = `${selectedPrompt.prompt}${customPrompt ? ` ${customPrompt}` : ""} Remove any text, watermarks, logos, price tags, or overlays from the original product.`;
       const body: any = { prompt: fullPrompt, aspect_ratio: "1:1", model: "pro" };
       if (imageUrl) body.image_url = imageUrl;
       else if (imageBase64) body.image_base64 = imageBase64;

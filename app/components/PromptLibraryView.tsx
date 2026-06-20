@@ -73,6 +73,8 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
   const [charCount, setCharCount] = useState(0);
   const [newCatMode, setNewCatMode] = useState(false);
   const [newCatName, setNewCatName] = useState("");
+  const [newSubMode, setNewSubMode] = useState(false);
+  const [newSubName, setNewSubName] = useState("");
   const PER_PAGE = 10;
 
   const saveLib = (items: any[]) => { setLibrary(items); try { localStorage.setItem("wesal_prompt_library", JSON.stringify(items)); } catch {} };
@@ -91,21 +93,45 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
     setCharCount(0);
     setNewCatMode(false);
     setNewCatName("");
+    setNewSubMode(false);
+    setNewSubName("");
     setModal("add");
   };
-  const openEdit = (p: any) => { setEditItem({...p}); setCharCount(p.prompt.length); setModal("edit"); };
+  const openEdit = (p: any) => { setEditItem({...p}); setCharCount(p.prompt.length); setNewCatMode(false); setNewCatName(""); setNewSubMode(false); setNewSubName(""); setModal("edit"); };
+
+  const [customTree, setCustomTree] = useState<Record<string,string[]>>(() => {
+    try { const s = localStorage.getItem("wesal_category_tree"); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
+  const saveCustomTree = (tree: Record<string,string[]>) => { setCustomTree(tree); try { localStorage.setItem("wesal_category_tree", JSON.stringify(tree)); } catch {} };
+  const fullTree: Record<string,string[]> = { ...CATEGORY_TREE };
+  Object.entries(customTree).forEach(([cat, subs]) => {
+    fullTree[cat] = [...new Set([...(fullTree[cat]||["عامة"]), ...subs])];
+  });
+  const allCatsList = [...new Set([...ALL_CATEGORIES, ...Object.keys(customTree)])];
 
   const saveItem = () => {
     if (!editItem.name.trim() || !editItem.prompt.trim()) return alert("الاسم والـ Prompt مطلوبان");
     // إذا فئة جديدة — استخدمها
     const finalCat = newCatMode && newCatName.trim() ? newCatName.trim() : editItem.category;
-    const finalItem = { ...editItem, category: finalCat, typeLabel: TYPE_LABELS[editItem.type]||editItem.type };
+    // إذا تصنيف فرعي جديد — استخدمه واحفظه في الشجرة المخصصة
+    const finalSub = newSubMode && newSubName.trim() ? newSubName.trim() : (editItem.subCategory || "عامة");
+    if (newSubMode && newSubName.trim()) {
+      const updatedTree = { ...customTree };
+      updatedTree[finalCat] = [...new Set([...(updatedTree[finalCat]||[]), finalSub])];
+      saveCustomTree(updatedTree);
+    }
+    if (newCatMode && newCatName.trim() && !fullTree[finalCat]) {
+      const updatedTree = { ...customTree, [finalCat]: ["عامة"] };
+      saveCustomTree(updatedTree);
+    }
+    const finalItem = { ...editItem, category: finalCat, subCategory: finalSub, typeLabel: TYPE_LABELS[editItem.type]||editItem.type };
     if (modal === "add") {
       saveLib([...library, { ...finalItem, id:`custom_${Date.now()}` }]);
     } else {
       saveLib(library.map(p => p.id === editItem.id ? finalItem : p));
     }
     setNewCatMode(false); setNewCatName("");
+    setNewSubMode(false); setNewSubName("");
     setModal(null);
   };
 
@@ -134,7 +160,7 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="🔍 بحث بالاسم أو الـ Prompt أو الوسوم..." style={{ ...iStyle, width:"220px" }} />
             <select value={filterCat} onChange={e => { setFilterCat(e.target.value); setPage(1); }} style={{ ...iStyle, width:"150px" }}>
               <option value="الكل">كل الفئات</option>
-              {[...new Set([...ALL_CATEGORIES, ...library.map(p => p.category)])].map(c => <option key={c} value={c}>{c}</option>)}
+              {[...new Set([...allCatsList, ...library.map(p => p.category)])].map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <div style={{ display:"flex", gap:"5px" }}>
               {(["الكل","white","env","dim"] as string[]).map(t => (
@@ -220,8 +246,8 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
 
       {/* Add / Edit Modal */}
       {modal && editItem && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
-          <div style={{ background:"var(--color-background-primary)", borderRadius:"12px", border:"0.5px solid var(--color-border-tertiary)", width:"540px", maxHeight:"90vh", overflowY:"auto", display:"flex", flexDirection:"column" }}>
+        <div onClick={() => setModal(null)} style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(15,15,25,0.65)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9999, padding:"20px", boxSizing:"border-box" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:"var(--color-background-primary, #ffffff)", borderRadius:"12px", border:"0.5px solid var(--color-border-tertiary)", width:"540px", maxWidth:"100%", maxHeight:"90vh", overflowY:"auto", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px rgba(0,0,0,0.35)" }}>
 
             {/* Modal Header */}
             <div style={{ padding:"16px 20px", borderBottom:"0.5px solid var(--color-border-tertiary)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -256,7 +282,7 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
                       placeholder="اسم الفئة الجديدة..." style={{ ...iStyle, borderColor:"#534AB7" }} />
                   ) : (
                     <select value={editItem.category} onChange={e => setEditItem({...editItem, category:e.target.value, subCategory:"عامة"})} style={iStyle}>
-                      {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      {allCatsList.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   )}
                 </div>
@@ -269,17 +295,30 @@ export default function PromptLibraryView({ sidebarJSX }: { sidebarJSX: React.Re
               </div>
 
               {/* Sub Category */}
-              {!newCatMode && CATEGORY_TREE[editItem.category]?.length > 1 && (
+              {!newCatMode && (
                 <div>
-                  <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 5px", fontWeight:"500" }}>التصنيف الفرعي</p>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:"5px" }}>
-                    {CATEGORY_TREE[editItem.category].map(sub => (
-                      <button key={sub} onClick={() => setEditItem({...editItem, subCategory:sub})}
-                        style={{ padding:"4px 10px", fontSize:"10px", background:(editItem.subCategory||"عامة")===sub?"#534AB7":"var(--color-background-secondary)", border:`0.5px solid ${(editItem.subCategory||"عامة")===sub?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"20px", color:(editItem.subCategory||"عامة")===sub?"#fff":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
-                        {sub}
-                      </button>
-                    ))}
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"5px" }}>
+                    <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:0, fontWeight:"500" }}>التصنيف الفرعي</p>
+                    <button onClick={() => { setNewSubMode(m => !m); setNewSubName(""); }}
+                      style={{ fontSize:"9px", padding:"2px 7px", background:newSubMode?"#534AB7":"var(--color-background-secondary)", border:`0.5px solid ${newSubMode?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"5px", color:newSubMode?"#fff":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit" }}>
+                      {newSubMode ? "✕ إلغاء" : "+ تصنيف فرعي جديد"}
+                    </button>
                   </div>
+                  {newSubMode ? (
+                    <input value={newSubName} onChange={e => setNewSubName(e.target.value)}
+                      placeholder="اسم التصنيف الفرعي الجديد..." style={{ ...iStyle, borderColor:"#534AB7" }} />
+                  ) : (
+                    (fullTree[editItem.category]?.length > 1) && (
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:"5px" }}>
+                        {fullTree[editItem.category].map(sub => (
+                          <button key={sub} onClick={() => setEditItem({...editItem, subCategory:sub})}
+                            style={{ padding:"4px 10px", fontSize:"10px", background:(editItem.subCategory||"عامة")===sub?"#534AB7":"var(--color-background-secondary)", border:`0.5px solid ${(editItem.subCategory||"عامة")===sub?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"20px", color:(editItem.subCategory||"عامة")===sub?"#fff":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                            {sub}
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  )}
                 </div>
               )}
 

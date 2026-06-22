@@ -221,8 +221,20 @@ export default function ContentStudioView({ sidebarJSX }) {
 
   const prevCatType = useRef({ category, activeType });
   if (prevCatType.current.category !== category || prevCatType.current.activeType !== activeType) {
+    const categoryChanged = prevCatType.current.category !== category;
     prevCatType.current = { category, activeType };
-    if (prevCatType.current.category !== category) setSubCategory("عامة");
+    if (categoryChanged) setSubCategory("عامة");
+
+    // إذا تغيّرت الفئة، ابحث عن أول نوع متاح في المكتبة لهذه الفئة
+    if (categoryChanged) {
+      const libItems = loadLib();
+      const availableTypes = ["white", "env", "dim"].filter(t => libItems.some(p => p.category === category && p.type === t));
+      if (availableTypes.length > 0 && !availableTypes.includes(activeType)) {
+        setActiveType(availableTypes[0]);
+        return; // سيُعاد الـ render مع النوع الجديد
+      }
+    }
+
     const np = loadLib().filter(p => p.category === category && p.type === activeType);
     randomPreviewRef.current = null;
     if (np.length > 1) setSelectedPromptId(RANDOM_PICK);

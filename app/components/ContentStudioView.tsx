@@ -1,6 +1,6 @@
 // @ts-nocheck
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const API_URL = "https://wesal-backend-production.up.railway.app";
 
@@ -106,31 +106,35 @@ export default function ContentStudioView({ sidebarJSX }) {
 
   const loadLib = () => { try { const s = localStorage.getItem("wesal_prompt_library"); return s ? JSON.parse(s) : INITIAL_PROMPT_LIBRARY; } catch { return INITIAL_PROMPT_LIBRARY; } };
 
-  // فئات ديناميكية = الثابتة + أي فئة مضافة في مكتبة الأوامر
-  const dynamicCategories = [...new Set([
-    ...CATEGORIES,
-    ...loadLib().map((p: any) => p.category).filter(Boolean),
-    ...Object.keys(loadCustomTree()),
-  ])];
-
-  // شجرة التصنيفات الفرعية الديناميكية
-  const getDynamicTree = (): Record<string,string[]> => {
-    const customTree = loadCustomTree();
+  // فئات ديناميكية — تُقرأ client-side بعد mount
+  const buildDynamicData = () => {
     const libItems = loadLib();
+    const customTree = loadCustomTree();
+    const cats = [...new Set([
+      ...CATEGORIES,
+      ...libItems.map((p: any) => p.category).filter(Boolean),
+      ...Object.keys(customTree),
+    ])];
     const tree: Record<string,string[]> = { ...CATEGORY_TREE };
-    // أضف من مكتبة الأوامر
     libItems.forEach((p: any) => {
       if (p.category && p.subCategory) {
         tree[p.category] = [...new Set([...(tree[p.category]||["عامة"]), p.subCategory])];
       }
     });
-    // أضف من الشجرة المخصصة
     Object.entries(customTree).forEach(([cat, subs]) => {
       tree[cat] = [...new Set([...(tree[cat]||["عامة"]), ...(subs as string[])])];
     });
-    return tree;
+    return { cats, tree };
   };
-  const dynamicTree = getDynamicTree();
+
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>(CATEGORIES);
+  const [dynamicTree, setDynamicTree] = useState<Record<string,string[]>>(CATEGORY_TREE);
+
+  useEffect(() => {
+    const { cats, tree } = buildDynamicData();
+    setDynamicCategories(cats);
+    setDynamicTree(tree);
+  }, []);
 
   // ── Studio States ──────────────────────────────────────────
   const [imagePreview, setImagePreview] = useState(null);

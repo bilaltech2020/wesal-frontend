@@ -94,12 +94,43 @@ const CATEGORY_TREE = {
   "أخرى":            ["عامة"],
 };
 const CATEGORIES = Object.keys(CATEGORY_TREE);
+
+// ── Shared helpers ──────────────────────────────────────────
+const loadCustomTree = (): Record<string,string[]> => {
+  try { const s = localStorage.getItem("wesal_category_tree"); return s ? JSON.parse(s) : {}; } catch { return {}; }
+};
 const TYPE_LABELS = { white:"خلفية بيضاء", env:"بيئة واقعية", dim:"مقاسات" };
 
 
 export default function ContentStudioView({ sidebarJSX }) {
 
   const loadLib = () => { try { const s = localStorage.getItem("wesal_prompt_library"); return s ? JSON.parse(s) : INITIAL_PROMPT_LIBRARY; } catch { return INITIAL_PROMPT_LIBRARY; } };
+
+  // فئات ديناميكية = الثابتة + أي فئة مضافة في مكتبة الأوامر
+  const dynamicCategories = [...new Set([
+    ...CATEGORIES,
+    ...loadLib().map((p: any) => p.category).filter(Boolean),
+    ...Object.keys(loadCustomTree()),
+  ])];
+
+  // شجرة التصنيفات الفرعية الديناميكية
+  const getDynamicTree = (): Record<string,string[]> => {
+    const customTree = loadCustomTree();
+    const libItems = loadLib();
+    const tree: Record<string,string[]> = { ...CATEGORY_TREE };
+    // أضف من مكتبة الأوامر
+    libItems.forEach((p: any) => {
+      if (p.category && p.subCategory) {
+        tree[p.category] = [...new Set([...(tree[p.category]||["عامة"]), p.subCategory])];
+      }
+    });
+    // أضف من الشجرة المخصصة
+    Object.entries(customTree).forEach(([cat, subs]) => {
+      tree[cat] = [...new Set([...(tree[cat]||["عامة"]), ...(subs as string[])])];
+    });
+    return tree;
+  };
+  const dynamicTree = getDynamicTree();
 
   // ── Studio States ──────────────────────────────────────────
   const [imagePreview, setImagePreview] = useState(null);
@@ -399,16 +430,16 @@ export default function ContentStudioView({ sidebarJSX }) {
             <div>
               <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 4px", fontWeight:"500" }}>فئة المنتج</p>
               <select value={category} onChange={e => { setCategory(e.target.value); setSubCategory("عامة"); }} style={iStyle}>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                {dynamicCategories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
             {/* ── Sub Category ── */}
-            {CATEGORY_TREE[category]?.length > 1 && (
+            {(dynamicTree[category]?.length > 1) && (
               <div>
                 <p style={{ fontSize:"11px", color:"var(--color-text-secondary)", margin:"0 0 4px", fontWeight:"500" }}>التصنيف الفرعي</p>
                 <div style={{ display:"flex", flexWrap:"wrap", gap:"4px" }}>
-                  {CATEGORY_TREE[category].map(sub => (
+                  {dynamicTree[category].map(sub => (
                     <button key={sub} onClick={() => setSubCategory(sub)}
                       style={{ padding:"4px 10px", fontSize:"10px", background:subCategory===sub?"#534AB7":"var(--color-background-primary)", border:`0.5px solid ${subCategory===sub?"#534AB7":"var(--color-border-secondary)"}`, borderRadius:"20px", color:subCategory===sub?"#EEEDFE":"var(--color-text-secondary)", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
                       {sub}

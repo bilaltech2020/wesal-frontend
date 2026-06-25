@@ -1,6 +1,6 @@
 // @ts-nocheck
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 
 const API_URL = "https://wesal-backend-production.up.railway.app";
 
@@ -106,35 +106,31 @@ export default function ContentStudioView({ sidebarJSX }) {
 
   const loadLib = () => { try { const s = localStorage.getItem("wesal_prompt_library"); return s ? JSON.parse(s) : INITIAL_PROMPT_LIBRARY; } catch { return INITIAL_PROMPT_LIBRARY; } };
 
-  // فئات ديناميكية — تُقرأ client-side بعد mount
-  const buildDynamicData = () => {
-    const libItems = loadLib();
+  // فئات ديناميكية = الثابتة + أي فئة مضافة في مكتبة الأوامر
+  const dynamicCategories = [...new Set([
+    ...CATEGORIES,
+    ...loadLib().map((p: any) => p.category).filter(Boolean),
+    ...Object.keys(loadCustomTree()),
+  ])];
+
+  // شجرة التصنيفات الفرعية الديناميكية
+  const getDynamicTree = (): Record<string,string[]> => {
     const customTree = loadCustomTree();
-    const cats = [...new Set([
-      ...CATEGORIES,
-      ...libItems.map((p: any) => p.category).filter(Boolean),
-      ...Object.keys(customTree),
-    ])];
+    const libItems = loadLib();
     const tree: Record<string,string[]> = { ...CATEGORY_TREE };
+    // أضف من مكتبة الأوامر
     libItems.forEach((p: any) => {
       if (p.category && p.subCategory) {
         tree[p.category] = [...new Set([...(tree[p.category]||["عامة"]), p.subCategory])];
       }
     });
+    // أضف من الشجرة المخصصة
     Object.entries(customTree).forEach(([cat, subs]) => {
       tree[cat] = [...new Set([...(tree[cat]||["عامة"]), ...(subs as string[])])];
     });
-    return { cats, tree };
+    return tree;
   };
-
-  const [dynamicCategories, setDynamicCategories] = useState<string[]>(CATEGORIES);
-  const [dynamicTree, setDynamicTree] = useState<Record<string,string[]>>(CATEGORY_TREE);
-
-  useEffect(() => {
-    const { cats, tree } = buildDynamicData();
-    setDynamicCategories(cats);
-    setDynamicTree(tree);
-  }, []);
+  const dynamicTree = getDynamicTree();
 
   // ── Studio States ──────────────────────────────────────────
   const [imagePreview, setImagePreview] = useState(null);
@@ -221,20 +217,8 @@ export default function ContentStudioView({ sidebarJSX }) {
 
   const prevCatType = useRef({ category, activeType });
   if (prevCatType.current.category !== category || prevCatType.current.activeType !== activeType) {
-    const categoryChanged = prevCatType.current.category !== category;
     prevCatType.current = { category, activeType };
-    if (categoryChanged) setSubCategory("عامة");
-
-    // إذا تغيّرت الفئة، ابحث عن أول نوع متاح في المكتبة لهذه الفئة
-    if (categoryChanged) {
-      const libItems = loadLib();
-      const availableTypes = ["white", "env", "dim"].filter(t => libItems.some(p => p.category === category && p.type === t));
-      if (availableTypes.length > 0 && !availableTypes.includes(activeType)) {
-        setActiveType(availableTypes[0]);
-        return; // سيُعاد الـ render مع النوع الجديد
-      }
-    }
-
+    if (prevCatType.current.category !== category) setSubCategory("عامة");
     const np = loadLib().filter(p => p.category === category && p.type === activeType);
     randomPreviewRef.current = null;
     if (np.length > 1) setSelectedPromptId(RANDOM_PICK);

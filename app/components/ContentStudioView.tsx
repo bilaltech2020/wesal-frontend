@@ -305,7 +305,7 @@ export default function ContentStudioView({ sidebarJSX }) {
   };
 
   // ── FLUX Kontext Image Generation (Replicate) ──────────────
-  const generateWithReplicate = async () => {
+  const generateWithGemini = async () => {
     const activePrompt = pickPromptForGeneration();
     if (!activePrompt) { setGenError("اختر Prompt من المكتبة أولاً"); return; }
     if (!imageBase64 && !imageUrl) { setGenError("ارفع صورة أو أدخل رابط أولاً"); return; }
@@ -313,7 +313,8 @@ export default function ContentStudioView({ sidebarJSX }) {
     setGenLoading(true); setGenError("");
     try {
       const fullPrompt = `${activePrompt.prompt}${customPrompt ? ` ${customPrompt}` : ""} Remove any text, watermarks, logos, price tags, or overlays from the original product.`;
-      const body: any = { prompt: fullPrompt, aspect_ratio: "1:1", model: "pro" };
+      const geminiKey = getGeminiKey();
+      const body: any = { prompt: fullPrompt, aspect_ratio: "1:1", gemini_key: geminiKey };
       if (imageUrl) body.image_url = imageUrl;
       else if (imageBase64) body.image_base64 = imageBase64;
 
@@ -342,14 +343,15 @@ export default function ContentStudioView({ sidebarJSX }) {
   };
 
   // ── Refine Generated Image (Replicate) ────────────────────
-  const refineWithReplicate = async () => {
+  const refineWithGemini = async () => {
     if (!refinePrompt.trim()) { setGenError("اكتب أمر التحسين"); return; }
     if (!generatedImage) { setGenError("ولّد صورة أولاً"); return; }
 
     setRefineLoading(true); setGenError("");
     try {
       const combinedPrompt = `${generatedImage.prompt}. Additional refinement: ${refinePrompt.trim()}. Ultra realistic, 8K, professional photography.`;
-      const body: any = { prompt: combinedPrompt, aspect_ratio: "1:1", model: "pro", image_url: generatedImage.imageUrl };
+      const geminiKey = getGeminiKey();
+      const body: any = { prompt: combinedPrompt, aspect_ratio: "1:1", gemini_key: geminiKey, image_url: generatedImage.imageUrl };
 
       const res = await fetch(`${API_URL}/content-studio/generate-image`, {
         method: "POST",
@@ -412,7 +414,7 @@ export default function ContentStudioView({ sidebarJSX }) {
 
             <div>
               <h2 style={{ fontSize:"15px", fontWeight:"700", margin:"0 0 2px" }}>✨ Content Studio</h2>
-              <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>توليد صور احترافية بـ FLUX AI</p>
+              <p style={{ fontSize:"11px", color:"var(--color-text-tertiary)", margin:0 }}>توليد صور احترافية بـ Gemini AI</p>
             </div>
 
 
@@ -508,9 +510,9 @@ export default function ContentStudioView({ sidebarJSX }) {
             </div>
 
             {/* ── Generate Button ── */}
-            <button onClick={generateWithReplicate} disabled={genLoading || !selectedPromptId || (!imageBase64 && !imageUrl)}
+            <button onClick={generateWithGemini} disabled={genLoading || !selectedPromptId || (!imageBase64 && !imageUrl)}
               style={{ width:"100%", padding:"11px", background:genLoading||!selectedPromptId?"#e0e0f0":"linear-gradient(135deg,#1a73e8,#0d47a1)", border:"none", borderRadius:"9px", color:genLoading||!selectedPromptId?"#9090c0":"#fff", fontSize:"13px", fontWeight:"700", cursor:genLoading||!selectedPromptId?"not-allowed":"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:"6px" }}>
-              {genLoading ? <><div style={{ width:16,height:16,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite" }} />جاري التوليد...</> : "🎨 ولّد الصورة بـ FLUX"}
+              {genLoading ? <><div style={{ width:16,height:16,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite" }} />جاري التوليد...</> : "🎨 ولّد الصورة بـ Gemini"}
             </button>
 
           </div>
@@ -588,9 +590,9 @@ export default function ContentStudioView({ sidebarJSX }) {
                     <div style={{ display:"flex", gap:"6px" }}>
                       <input value={refinePrompt} onChange={e => setRefinePrompt(e.target.value)}
                         placeholder="أضف أمر تحسين مخصص بالإنجليزي..."
-                        onKeyDown={e => e.key==="Enter" && refineWithReplicate()}
+                        onKeyDown={e => e.key==="Enter" && refineWithGemini()}
                         style={{ flex:1, padding:"8px 10px", background:"var(--color-background-secondary)", border:"0.5px solid var(--color-border-secondary)", borderRadius:"8px", fontSize:"11px", color:"var(--color-text-primary)", fontFamily:"inherit", outline:"none", direction:"ltr", textAlign:"left" }} />
-                      <button onClick={refineWithReplicate} disabled={refineLoading || !refinePrompt.trim()}
+                      <button onClick={refineWithGemini} disabled={refineLoading || !refinePrompt.trim()}
                         style={{ padding:"8px 14px", background:refineLoading||!refinePrompt.trim()?"#e0e0f0":"linear-gradient(135deg,#7c3aed,#6d28d9)", border:"none", borderRadius:"8px", color:refineLoading||!refinePrompt.trim()?"#9090c0":"#fff", fontSize:"12px", fontWeight:"600", cursor:refineLoading||!refinePrompt.trim()?"not-allowed":"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
                         {refineLoading ? "⏳" : "✨ حسّن"}
                       </button>
